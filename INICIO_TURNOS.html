@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Control de Turnos y Horas Extras</title>
+    <link rel="stylesheet" href="TURNOS.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="contenedor-principal">
+        <header class="encabezado">
+            <h1>Sistema de Control de Turnos</h1>
+            <p class="subtitulo">Gestión de Horarios y Cálculo de Horas Extras </p>
+        </header>
+
+    <main class="contenido-principal">
+            <!-- Sección de Configuración -->
+            <section id="seccion-configuracion">
+                <div class="main-config-container">
+                    <!-- Header de la configuración -->
+                    <div class="main-config-header">
+                        <div class="config-header-content">
+                            <h1 class="main-config-title">
+                                <span class="main-config-icon">👤</span>
+                                Configuración Inicial
+                            </h1>
+                            <p class="main-config-subtitle">
+                                Establece los datos del empleado, período de trabajo y horarios de turnos
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Contenido principal -->
+                    <div class="main-config-body">
+                        <!-- Fila de Datos Personales -->
+                        <div class="main-config-row">
+                            <div class="main-config-section" style="grid-column: 1 / -1;">
+                                <div class="section-header">
+                                    <h2 class="section-title">
+                                        <span class="section-icon">👤</span>
+                                        Datos Iniciales
+                                    </h2>
+
+                                </div>
+                                <div class="personal-data-card">
+                                    <div class="config-input-group">
+                                        <label for="numero-empleados" class="config-label">
+                                            <span class="label-icon">👥</span>
+                                            Número de Empleados
+                                        </label>
+                                        <input type="number" id="numero-empleados" class="config-input" placeholder="10" value="1" min="1" max="50">
+                                    </div>
+                                    <div class="config-input-group">
+                                        <label for="salario-mensual" class="config-label">
+                                            <span class="label-icon">💰</span>
+                                            Salario Mensual (Base)
+                                        </label>
+                                        <div class="percentage-input-container">
+                                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="salario-mensual" class="config-input" placeholder="1,750,905" value="1750905" style="padding-left: 2.5rem;">
+                                            <span class="percentage-symbol" style="left: 1rem; right: auto;">$</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fila de Período de Trabajo -->
+                        <div class="main-config-row">
+                            <div class="main-config-section" style="grid-column: 1 / -1;">
+                                <div class="section-header">
+                                    <h2 class="section-title">
+                                        <span class="section-icon">📅</span>
+                                        Período de Trabajo
+                                    </h2>
+                                </div>
+                                <div class="period-card">
+                                    <div class="date-inputs">
+                                        <div class="config-input-group">
+                                            <label for="fecha-inicio" class="config-label">
+                                                <span class="label-icon">📅</span>
+                                                Fecha de Inicio
+                                            </label>
+                                            <div class="date-input-container">
+                                                <input type="date" id="fecha-inicio" class="config-input">
+                                                <div class="day-display" id="dia-semana-inicio"></div>
+                                            </div>
+                                        </div>
+                                        <div class="config-input-group">
+                                            <label for="fecha-fin" class="config-label">
+                                                <span class="label-icon">📅</span>
+                                                Fecha de Fin
+                                            </label>
+                                            <div class="date-input-container">
+                                                <input type="date" id="fecha-fin" class="config-input">
+                                                <div class="day-display" id="dia-semana-fin"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Segunda fila: Horarios de Turnos y Configuración de Almuerzo -->
+                        <div class="main-config-row">
+                            <!-- Sección de Horarios de Turnos -->
+                            <div class="main-config-section">
+                                <div class="section-header">
+                                    <h2 class="section-title">
+                                        <span class="section-icon">⏰</span>
+                                        Configuración de Turnos
+                                    </h2>
+                                </div>
+                                <div id="dynamic-shifts-list" class="shifts-grid">
+                                    <!-- Los turnos dinámicos se renderizarán aquí mediante JavaScript -->
+                                </div>
+                                <button id="btn-add-shift" class="action-btn primary-btn" style="margin-top: 15px; width: 100%;">
+                                    <span class="btn-icon">➕</span> Añadir Nuevo Turno
+                                </button>
+                            </div>
+
+                            <!-- Sección de Almuerzo -->
+                            <div class="main-config-section">
+                                <div class="section-header">
+                                    <h2 class="section-title">
+                                        <span class="section-icon">🍽️</span>
+                                        Configuración de Almuerzo
+                                    </h2>
+                                </div>
+
+                                <div class="lunch-card">
+                                    <div class="lunch-type-selector">
+                                        <div class="radio-option">
+                                            <input type="radio" id="tipo-sin-almuerzo" name="tipo-almuerzo" value="sin-almuerzo">
+                                            <label for="tipo-sin-almuerzo" class="radio-label">
+                                                <span class="radio-icon">🚫</span>
+                                                Sin Almuerzo
+                                            </label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="tipo-predefinido" name="tipo-almuerzo" value="predefinido" checked>
+                                            <label for="tipo-predefinido" class="radio-label">
+                                                <span class="radio-icon">⏱️</span>
+                                                Tiempo Predefinido
+                                            </label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="tipo-personalizado" name="tipo-almuerzo" value="personalizado">
+                                            <label for="tipo-personalizado" class="radio-label">
+                                                <span class="radio-icon">🕐</span>
+                                                Horario Personalizado
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                    <!-- Opciones predefinidas -->
+                                    <div id="opciones-predefinidas" class="lunch-options">
+                                        <div class="predefined-options">
+                                            <div class="radio-option">
+                                                <input type="radio" id="almuerzo-30min" name="tiempo-almuerzo" value="0.5" checked>
+                                                <label for="almuerzo-30min" class="radio-label">30 minutos</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="almuerzo-1hora" name="tiempo-almuerzo" value="1">
+                                                <label for="almuerzo-1hora" class="radio-label">1 hora</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Horario personalizado -->
+                                    <div id="horario-personalizado" class="lunch-options" style="display: none;">
+                                        <div class="custom-time-inputs">
+                                            <div class="time-input-group">
+                                                <label for="inicio-almuerzo" class="time-label">Inicio</label>
+                                                <input type="time" id="inicio-almuerzo" class="time-input" value="12:00">
+                                            </div>
+                                            <div class="time-separator">-</div>
+                                            <div class="time-input-group">
+                                                <label for="fin-almuerzo" class="time-label">Fin</label>
+                                                <input type="time" id="fin-almuerzo" class="time-input" value="13:00">
+                                    </div>
+                                </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                            </div>
+
+                    <!-- Footer con acciones -->
+                    <div class="main-config-footer">
+                        <div class="footer-actions">
+                            <button id="btn-manual-usuario" class="action-btn secondary-btn">
+                                <span class="btn-icon">❔</span>
+                                Manual de Usuario
+                            </button>
+                            <button id="btn-sistema-config" class="action-btn secondary-btn">
+                                <span class="btn-icon">⚙️</span>
+                                Configuración
+                            </button>
+                            <button id="btn-limpiar-todo" class="action-btn secondary-btn">
+                                <span class="btn-icon">🗑️</span>
+                                Limpiar Todo
+                            </button>
+                            <button id="btn-generar-periodo" class="action-btn primary-btn">
+                                <span class="btn-icon">➡️</span>
+                                Siguiente
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- Sección de Entrada de Turnos -->
+            <section id="seccion-turnos" style="display: none;">
+                <div class="tarjeta" style="margin-top: 1rem;">
+                    <h2 style="margin-top: 0;">Programación de Turnos</h2>
+                    <div class="info-periodo" id="info-periodo"></div>
+
+                    <!-- Lista de empleados agregados -->
+                    <div class="empleados-agregados">
+                        <h3>Empleados Agregados</h3>
+                        <div id="lista-empleados" class="lista-empleados">
+                            <!-- Los empleados se mostrarán aquí dinámicamente -->
+                        </div>
+                    </div>
+
+                    <!-- Contenedor dinámico para las semanas -->
+                    <div class="acciones-multi-empleado">
+                        <button id="btn-abrir-modal-empleado" class="action-btn secondary-btn">
+                            <span class="btn-icon">➕</span> Agregar Empleado
+                        </button>
+                    </div>
+                    <div id="contenedor-semanas" class="contenedor-semanas"></div>
+
+                    <div class="botones-accion">
+                        <button class="btn-atras-a-config boton-secundario">&larr; Atrás</button>
+                        <button id="btn-calcular" class="boton-principal">Ver Resultados &rarr;</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección de Resultados -->
+            <section id="seccion-resultados" style="display: none;">
+                <div class="tarjeta">
+                    <div class="header-resultados">
+                        <h2>Resumen de Horas Trabajadas</h2>
+                        <button class="btn-atras-a-turnos boton-secundario">&larr; Atrás</button>
+                    </div>
+                    <div id="info-empleado" class="info-empleado"></div>
+
+                    <div class="acciones-exportar">
+                        <button id="btn-exportar" class="boton-secundario">Exportar Resultados</button>
+                    </div>
+
+                    <!-- Pestañas para resultados semanales y resumen total -->
+                    <div class="pestanas-resultados">
+                        <button class="pestana activa" data-pestana="semanal">Resultados Semanales</button>
+                        <button class="pestana" data-pestana="resumen">Resumen Total del Período</button>
+                        <button class="pestana" data-pestana="liquidacion">Liquidación de Pago</button>
+                    </div>
+
+                    <!-- Contenido de Resultados Semanales -->
+                    <div id="contenido-semanal" class="contenido-pestana activo">
+                        <div id="resultados-semanales" class="resultados-semanales"></div>
+                        <div class="contenedor-boton-atras">
+                            <button class="btn-atras-a-turnos boton-secundario">&larr; Atrás</button>
+                        </div>
+                    </div>
+
+                    <!-- Contenido de Resumen Total -->
+                    <div id="contenido-resumen" class="contenido-pestana">
+                        <div class="resumen-total">
+                            <h3>Resumen Total del Período</h3>
+                            <div class="grid-resumen" id="grid-resumen-total"></div>
+                        </div>
+                        <div class="contenedor-boton-atras">
+                            <button class="btn-atras-a-turnos boton-secundario">&larr; Atrás</button>
+                        </div>
+                    </div>
+
+                    <!-- Contenido de Liquidación -->
+                    <div id="contenido-liquidacion" class="contenido-pestana">
+                        <div id="liquidacion-pago"></div>
+                    </div>
+                </div>
+            </section>
+        <!-- Sección de Configuración del Sistema -->
+            <section id="seccion-sistema-configuracion" style="display: none;">
+                <div class="config-panel-container">
+                    <!-- Header del Panel -->
+                    <div class="config-panel-header">
+                        <div class="config-header-content">
+                            <h1 class="config-title">
+                                <span class="config-icon">⚙️</span>
+                                Configuración del Sistema
+                            </h1>
+                            <p class="config-subtitle">
+                                Administra los porcentajes y horarios para el cálculo de horas extras y recargos
+                            </p>
+                        </div>
+                        <div class="config-header-actions">
+                            <button id="btn-cancelar-sistema-config" class="config-btn config-btn-cancel">
+                                <span class="btn-icon">↩️</span>
+                                Volver
+                            </button>
+                            <button id="btn-reset-config" class="config-btn config-btn-secondary">
+                                <span class="btn-icon">🔄</span>
+                                Restaurar Valores
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Panel de Configuraciones -->
+                    <div class="config-panel-body">
+                        <div class="config-panel-grid">
+                            <section class="config-group">
+                                <div class="config-group-header">
+                                    <h2 class="config-group-title">
+                                        <span class="section-icon">💰</span>
+                                        Recargos
+                                    </h2>
+                                    <p class="config-group-description">
+                                        Configura los porcentajes, horarios y códigos de exportación para los recargos del sistema.
+                                    </p>
+                                </div>
+                                <div id="config-recargos-group" class="config-cards-grid"></div>
+                            </section>
+
+                            <section class="config-group">
+                                <div class="config-group-header">
+                                    <h2 class="config-group-title">
+                                        <span class="section-icon">⏰</span>
+                                        Horas Extras
+                                    </h2>
+                                    <p class="config-group-description">
+                                        Ajusta los porcentajes y códigos de exportación de cada tipo de hora extra de forma clara y uniforme.
+                                    </p>
+                                </div>
+                                <div id="config-extras-group" class="config-cards-grid"></div>
+                            </section>
+                        </div>
+                    </div>
+
+    <div class="config-section config-conceptos-nomina" style="grid-column: 1 / -1; margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: 2rem;">
+        <div class="config-section-header">
+            <h2 class="config-section-title">
+                <span class="section-icon">📋</span>
+                Conceptos de Nómina (Ausencias, Licencias, etc.)
+            </h2>
+             <p class="config-section-desc">
+                Define las horas y nombres para conceptos como incapacidades, vacaciones, y otros permisos.
+            </p>
+        </div>
+                        <div id="config-tipos-turno-especiales-container" class="config-cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+                            <!-- Las tarjetas de configuración para tipos de turno especiales se generarán aquí -->
+                        </div>
+                        <div class="config-footer-actions" style="margin-top: 1.5rem; text-align: left;">
+                             <button id="btn-agregar-tipo-turno" class="config-btn config-btn-secondary">
+                                <span class="btn-icon">➕</span>
+                                Agregar Nuevo Concepto
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Footer del Panel -->
+                    <div class="config-panel-footer">
+                        <div class="config-footer-info">
+                            <span class="footer-icon">ℹ️</span>
+                            <span class="footer-text">Los cambios se aplicarán inmediatamente en todos los cálculos del sistema</span>
+                        </div>
+                        <div class="config-footer-actions">
+
+                            <button id="btn-guardar-sistema-config" class="config-btn config-btn-primary">
+                                <span class="btn-icon">💾</span>
+                                Guardar Configuración
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sección de Manual de Usuario -->
+            <section id="seccion-instructivo" style="display: none;">
+                <div class="tarjeta">
+                    <div class="header-resultados">
+                        <h2>Manual de Usuario</h2>
+                        <button class="btn-atras-a-config boton-secundario">&larr; Volver</button>
+                    </div>
+                    <div id="contenido-instructivo" class="contenido-markdown" style="padding: 1rem 2rem;">
+                        <!-- El contenido del manual se cargará aquí -->
+                    </div>
+                     <div class="contenedor-boton-atras">
+                        <button class="btn-atras-a-config boton-secundario">&larr; Volver</button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <footer class="pie-pagina">
+            <p>&copy; 2025 Sistema de Control de Turnos - Todos los derechos reservados @alejostone</p>
+        </footer>
+    </div>
+
+    <!-- Modal para agregar nuevo empleado -->
+    <div id="modal-agregar-empleado" class="modal-overlay" style="display: none;">
+        <div class="modal-contenido">
+            <div class="modal-header">
+                <h2>Agregar Nuevo Empleado</h2>
+                <button id="btn-cerrar-modal" class="modal-cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="config-input-group">
+                    <label for="modal-documento" class="config-label">Número de Documento</label>
+                    <input type="text" id="modal-documento" class="config-input" placeholder="Documento del empleado">
+                </div>
+                <div class="config-input-group">
+                    <label for="modal-nombre" class="config-label">Nombre Completo</label>
+                    <input type="text" id="modal-nombre" class="config-input" placeholder="Nombre del empleado">
+                </div>
+                <div class="config-input-group">
+                    <label for="modal-salario" class="config-label">Salario Mensual</label>
+                    <input type="text" id="modal-salario" class="config-input" placeholder="Salario sin puntos">
+                </div>
+                <div class="date-inputs">
+                    <div class="config-input-group">
+                        <label for="modal-fecha-inicio" class="config-label">Fecha de Inicio</label>
+                        <input type="date" id="modal-fecha-inicio" class="config-input">
+                    </div>
+                    <div class="config-input-group">
+                        <label for="modal-fecha-fin" class="config-label">Fecha de Fin</label>
+                        <input type="date" id="modal-fecha-fin" class="config-input">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-confirmar-agregar-empleado" class="boton-principal">Confirmar y Agregar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="instructivo.js"></script>
+    <script src="TURNOS.js"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Test Runner - Turnos</title>
+  <style>body{font-family:Segoe UI, Tahoma, sans-serif;padding:20px} .ok{color:green}.fail{color:red} pre{background:#f3f4f6;padding:10px;border-radius:6px}</style>
+</head>
+<body>
+  <h2>Runner de pruebas rápidas - Turnos</h2>
+  <div id="out">Cargando...</div>
+
+  <script src="../TURNOS.js"></script>
+  <script src="turnos_scenarios.js"></script>
+  <script>
+    async function waitForSistema(timeout = 3000) {
+      const start = Date.now();
+      while (Date.now() - start < timeout) {
+        if (window.SistemaTurnosMejorado) return window.SistemaTurnosMejorado;
+        await new Promise(r => setTimeout(r, 50));
+      }
+      throw new Error('SistemaTurnosMejorado no disponible');
+    }
+
+    async function run() {
+      const scenarios = (typeof TEST_SCENARIOS !== 'undefined') ? TEST_SCENARIOS : [];
+      const CL = await waitForSistema().catch(e => { throw e; });
+      const app = new CL({ skipUI: true });
+
+      // For tests, force configuracionAlmuerzo to a predictable predefinido 0.5h
+      app.configuracionAlmuerzo = { tipo: 'predefinido', tiempoEnHoras: 0.5 };
+
+      const results = [];
+      for (const s of scenarios) {
+        // Ensure types are registered
+        app.configuracion.turnosDinamicos[s.codigo] = {
+          id: 'test_' + s.codigo,
+          nombre: s.nombre,
+          codigo: s.codigo,
+          inicio: s.inicio,
+          fin: s.fin,
+          color: s.color,
+          descontarAlimentacion: s.descontarAlimentacion,
+          activo: true
+        };
+        app.actualizarTiposTurno();
+        const fecha = new Date(s.fecha + 'T00:00:00');
+        const res = app.calcularHorasTurno(s.codigo, fecha, 0, app.horasMaximasSemanalesNormal);
+        results.push({scenario: s.codigo, esperado: s.esperadoHorasNetas, total: res.totalHoras, detalle: res});
+      }
+
+      const out = document.getElementById('out');
+      out.innerHTML = '';
+      results.forEach(r => {
+        const ok = Math.abs(r.total - r.esperado) < 0.5; // tolerance
+        const div = document.createElement('div');
+        div.innerHTML = `<h3>${r.scenario} - <span class="${ok?'ok':'fail'}">${ok? 'OK':'FAIL'}</span></h3>` +
+                        `<p>Esperado (horas netas): <strong>${r.esperado}</strong></p>` +
+                        `<p>Obtenido totalHoras: <strong>${r.total.toFixed(3)}</strong></p>` +
+                        `<pre>${JSON.stringify(r.detalle, null, 2)}</pre>`;
+        out.appendChild(div);
+      });
+    }
+    run().catch(e => { document.getElementById('out').textContent = 'Error: ' + e.message; console.error(e); });
+  </script>
+</body>
+</html>
