@@ -386,175 +386,109 @@ class SistemaTurnosMejorado {
     return `<span class="turno-badge" style="${inline}"><span class="turno-indicator" style="background:${estilo.bg}; border:1px solid ${estilo.border}"></span><span class="turno-text">${texto}</span></span>`;
   }
 
-  /**
-   * Devuelve las ventanas de almuerzo (en minutos 0-1439) para la configuración dada.
-   * Se usa tanto en el cálculo de horas como en el loop minuto-a-minuto para mantener consistencia.
-   */
-  obtenerVentanasAlmuerzo(inicioTurnoStr, finTurnoStr, confAlm, es24h) {
-    const timeToMinutes = (time) => {
-      const [h, m] = time.split(":").map(Number);
-      return h * 60 + m;
-    };
-    const minutesInDay = 24 * 60;
-    if (!confAlm || confAlm.tipo === 'sin-almuerzo') return [];
+  _toMinutes(time) {
+    const [h, m] = String(time || "00:00").split(":").map(Number);
+    return (h || 0) * 60 + (m || 0);
+  }
 
-    const shiftStart = timeToMinutes(inicioTurnoStr);
-    let shiftEnd = timeToMinutes(finTurnoStr);
-    if (shiftEnd <= shiftStart) shiftEnd += minutesInDay;
-    const dur = shiftEnd - shiftStart;
+  _duracionRangoMinutos(inicioStr, finStr) {
+    const inicio = this._toMinutes(inicioStr);
+    let fin = this._toMinutes(finStr);
+    if (fin <= inicio) fin += 24 * 60;
+    return Math.max(0, fin - inicio);
+  }
 
-    const windowsAbs = [];
+  _obtenerMinutosAlimentacion(confAlm) {
+    if (!confAlm || confAlm.tipo === "sin-almuerzo") return 0;
+    if (confAlm.tipo === "predefinido") {
+      return Math.max(0, Math.round((confAlm.tiempoEnHoras || 0) * 60));
+    }
+    if (confAlm.tipo === "personalizado") {
+      if (!confAlm.inicio || !confAlm.fin) return 0;
+      return this._duracionRangoMinutos(confAlm.inicio, confAlm.fin);
+    }
+    return 0;
+  }
 
-    if (confAlm.tipo === 'predefinido') {
-      const tiempoMin = Math.round((confAlm.tiempoEnHoras || 0) * 60);
-      if (tiempoMin <= 0) return [];
-      if (!es24h) {
-        const lunchStart = shiftStart + Math.floor((dur - tiempoMin) / 2);
-        windowsAbs.push({ start: lunchStart, end: lunchStart + tiempoMin });
+  _normalizarVentanas(ventanas, min, max) {
+    const clipped = (ventanas || [])
+      .map((w) => ({
+        start: Math.max(min, Number(w.start)),
+        end: Math.min(max, Number(w.end)),
+      }))
+      .filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start)
+      .sort((a, b) => a.start - b.start);
+
+    if (clipped.length <= 1) return clipped;
+
+    const merged = [clipped[0]];
+    for (let i = 1; i < clipped.length; i++) {
+      const last = merged[merged.length - 1];
+      const current = clipped[i];
+      if (current.start <= last.end) {
+        last.end = Math.max(last.end, current.end);
       } else {
-        const firstQuarter = shiftStart + Math.floor(dur / 4);
-        const secondQuarter = shiftStart + Math.floor((3 * dur) / 4);
-        windowsAbs.push({ start: firstQuarter, end: firstQuarter + tiempoMin });
-        windowsAbs.push({ start: secondQuarter, end: secondQuarter + tiempoMin });
+        merged.push(current);
       }
-      return windowsAbs;
     }
-
-    if (confAlm.tipo === 'personalizado') {
-      if (!confAlm.inicio || !confAlm.fin) return [];
-      let s = timeToMinutes(confAlm.inicio);
-      let e = timeToMinutes(confAlm.fin);
-      if (e <= s) e += minutesInDay;
-      // Considerar ocurrencias cercanas que intersecten el shift (k = -1,0,1)
-      for (let k = -1; k <= 1; k++) {
-        const ws = s + k * minutesInDay;
-        const we = e + k * minutesInDay;
-        const intersectStart = Math.max(ws, shiftStart);
-        const intersectEnd = Math.min(we, shiftEnd);
-        if (intersectEnd > intersectStart) {
-          windowsAbs.push({ start: intersectStart, end: intersectEnd });
-        }
-      }
-      if (es24h) {
-        // Si es 24h y la ventana original no cubre dos espacios, añadir otra en +12h si aplica
-        const half = 12 * 60;
-        const more = [];
-        windowsAbs.forEach(w => {
-          more.push({ start: w.start + half, end: w.end + half });
-        });
-        windowsAbs.push(...more);
-      }
-      return windowsAbs;
-    }
-
-    return [];
+    return merged;
   }
 
-  /**
-   * Calcula los minutos de alimentación que deben aplicarse al inicio del turno
-   * y devuelve ventanas adicionales (por ejemplo la segunda pausa en 24H).
-   * Retorna: { primary: Number, extraWindows: Array<{start,end}> }
-   */
-  _calcularMinutosAlmuerzoPrimario(inicioTurnoStr, finTurnoStr, confAlm, es24h) {
-    const timeToMinutes = (time) => {
-      const [h, m] = time.split(":").map(Number);
-      return h * 60 + m;
+  _obtenerContextoAlimentacionTurno(inicioTurnoStr, finTurnoStr, confAlm, es24h = false) {
+    const inicioProgramado = this._toMinutes(inicioTurnoStr);
+    let finProgramado = this._toMinutes(finTurnoStr);
+    if (finProgramado <= inicioProgramado) finProgramado += 24 * 60;
+
+    const duracionTurno = Math.max(0, finProgramado - inicioProgramado);
+    const minutosAlimentacion = Math.min(
+      this._obtenerMinutosAlimentacion(confAlm),
+      duracionTurno
+    );
+
+    const inicioEfectivo = inicioProgramado + minutosAlimentacion;
+    const ventanasNoLaboradas = [];
+
+    // Mantiene la regla especial histórica para 24H:
+    // una segunda pausa con la misma duración, 12 horas después del inicio programado.
+    if (es24h && minutosAlimentacion > 0) {
+      const segundaInicio = inicioProgramado + 12 * 60;
+      ventanasNoLaboradas.push({
+        start: segundaInicio,
+        end: segundaInicio + minutosAlimentacion,
+      });
+    }
+
+    const ventanas = this._normalizarVentanas(
+      ventanasNoLaboradas,
+      inicioEfectivo,
+      finProgramado
+    );
+
+    return {
+      inicioProgramado,
+      finProgramado,
+      inicioEfectivo,
+      ventanasNoLaboradas: ventanas,
     };
-    const minutesInDay = 24 * 60;
-    if (!confAlm || confAlm.tipo === 'sin-almuerzo') return { primary: 0, extraWindows: [] };
-
-    if (confAlm.tipo === 'predefinido') {
-      const tiempoMin = Math.round((confAlm.tiempoEnHoras || 0) * 60);
-      if (tiempoMin <= 0) return { primary: 0, extraWindows: [] };
-      const shiftStart = timeToMinutes(inicioTurnoStr);
-      let shiftEnd = timeToMinutes(finTurnoStr);
-      if (shiftEnd <= shiftStart) shiftEnd += minutesInDay;
-      const dur = shiftEnd - shiftStart;
-
-      const extra = [];
-      if (es24h) {
-        const secondQuarter = shiftStart + Math.floor((3 * dur) / 4);
-        // Añadir segunda pausa si no solapa con la primaria
-        if (Math.abs(secondQuarter - shiftStart) >= tiempoMin) {
-          extra.push({ start: secondQuarter, end: secondQuarter + tiempoMin });
-        }
-      }
-      return { primary: tiempoMin, extraWindows: extra };
-    }
-
-    if (confAlm.tipo === 'personalizado') {
-      if (!confAlm.inicio || !confAlm.fin) return { primary: 0, extraWindows: [] };
-      let s = timeToMinutes(confAlm.inicio);
-      let e = timeToMinutes(confAlm.fin);
-      if (e <= s) e += minutesInDay;
-      const dur = e - s;
-      const extra = [];
-      if (es24h) {
-        // Conserva la lógica previa que añadía una segunda ventana +12h
-        extra.push({ start: s + 12 * 60, end: e + 12 * 60 });
-      }
-      return { primary: dur, extraWindows: extra };
-    }
-
-    return { primary: 0, extraWindows: [] };
   }
 
   /**
-   * Cuenta minutos efectivos dentro del turno excluyendo ventanas de almuerzo.
+   * Cuenta minutos efectivos dentro del turno excluyendo alimentación.
    */
   contarMinutosEfectivos(inicioTurnoStr, finTurnoStr, confAlm, es24h) {
-    const timeToMinutes = (time) => {
-      const [hours, minutes] = time.split(":").map(Number);
-      return hours * 60 + minutes;
-    };
-    const inicioTurnoMin = timeToMinutes(inicioTurnoStr);
-    let finTurnoMin = timeToMinutes(finTurnoStr);
-    if (finTurnoMin <= inicioTurnoMin) finTurnoMin += 24 * 60;
+    const ctx = this._obtenerContextoAlimentacionTurno(
+      inicioTurnoStr,
+      finTurnoStr,
+      confAlm,
+      es24h
+    );
+    if (ctx.inicioEfectivo >= ctx.finProgramado) return 0;
 
-    const dur = finTurnoMin - inicioTurnoMin;
-
-    // Calcular minutos primarios de almuerzo que se aplicarán AL INICIO del turno
-    const { primary: primaryMin, extraWindows } = this._calcularMinutosAlmuerzoPrimario(inicioTurnoStr, finTurnoStr, confAlm, es24h);
-
-    // Para turnos normales (no 24h) la regla nueva indica que la alimentación
-    // se aplica AL INICIO y reemplaza las ventanas previas; solo en 24h
-    // debemos conservar ventanas adicionales (segunda pausa).
-    let lunchWindowsAbs = [];
-    if (es24h) {
-      lunchWindowsAbs = this.obtenerVentanasAlmuerzo(inicioTurnoStr, finTurnoStr, confAlm, es24h).slice();
-      // Si la función original devolvía 2 ventanas (predefinido en 24h),
-      // reemplazamos la primera por la primaria aplicada al inicio y conservamos la segunda.
-      if (lunchWindowsAbs.length > 1) {
-        // Eliminar la ventana con menor start (primer elemento ordenado por start)
-        lunchWindowsAbs.sort((a, b) => a.start - b.start);
-        lunchWindowsAbs.shift();
-      } else if (extraWindows && extraWindows.length) {
-        lunchWindowsAbs.push(...extraWindows);
-      }
+    let minutosLaborados = ctx.finProgramado - ctx.inicioEfectivo;
+    for (const w of ctx.ventanasNoLaboradas) {
+      minutosLaborados -= w.end - w.start;
     }
-
-    // Función para calcular solapamiento entre ventanas
-    const overlap = (aStart, aEnd, bStart, bEnd) => Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
-
-    // Sumar minutos de almuerzo total evitando doble conteo con la primaria aplicada al inicio
-    let totalLunch = primaryMin;
-    const primaryStart = inicioTurnoMin;
-    const primaryEnd = inicioTurnoMin + primaryMin;
-
-    for (const w of lunchWindowsAbs) {
-      // Clip ventana al turno
-      const ws = Math.max(w.start, inicioTurnoMin);
-      const we = Math.min(w.end, finTurnoMin);
-      if (we <= ws) continue;
-      // Restar la porción que ya corresponde a la primaria (evita duplicados)
-      const ov = overlap(ws, we, primaryStart, primaryEnd);
-      totalLunch += (we - ws) - ov;
-    }
-
-    // Asegurar que no exceda la duración del turno
-    totalLunch = Math.min(totalLunch, dur);
-
-    return Math.max(0, dur - totalLunch);
+    return Math.max(0, minutosLaborados);
   }
 
   actualizarTiposTurno() {
@@ -627,6 +561,8 @@ class SistemaTurnosMejorado {
         },
       };
     }
+    const huboLimpiezaInicial = this._eliminarConceptosObsoletos(config);
+
     // Asegurarse de que la configuración vieja tenga los nuevos tipos
     if (!config.tiposTurnoEspeciales) {
       config.tiposTurnoEspeciales = {
@@ -684,11 +620,6 @@ class SistemaTurnosMejorado {
         recargoNocturno: "010",
       };
     } else {
-      // Eliminar concepto obsoleto de configuraciones antiguas
-      if (config.tiposTurnoEspeciales && config.tiposTurnoEspeciales.DF) {
-        delete config.tiposTurnoEspeciales.DF;
-      }
-
       const defaults = {
         horasExtrasDiurnas: "045",
         horasExtrasNocturnas: "046",
@@ -705,7 +636,52 @@ class SistemaTurnosMejorado {
       });
     }
 
+    if (huboLimpiezaInicial) {
+      localStorage.setItem("configuracionTurnos", JSON.stringify(config));
+    }
+
     return config;
+  }
+
+  _eliminarConceptosObsoletos(config) {
+    if (!config || typeof config !== "object") return;
+    let huboCambios = false;
+
+    const limpiarColeccion = (coleccion) => {
+      if (!coleccion || typeof coleccion !== "object") return;
+
+      Object.keys(coleccion).forEach((codigo) => {
+        const item = coleccion[codigo];
+        if (this._esConceptoObsoleto(codigo, item?.nombre)) {
+          delete coleccion[codigo];
+          huboCambios = true;
+        }
+      });
+    };
+
+    limpiarColeccion(config.tiposTurnoEspeciales);
+    limpiarColeccion(config.turnosDinamicos);
+    return huboCambios;
+  }
+
+  _esConceptoObsoleto(codigo, nombre) {
+    const normalizar = (valor) =>
+      String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]/g, "");
+
+    const codigoNormalizado = normalizar(codigo);
+    const nombreNormalizado = normalizar(nombre);
+
+    return (
+      codigoNormalizado === "df" ||
+      codigoNormalizado.includes("familyday") ||
+      nombreNormalizado.includes("diafamilia") ||
+      nombreNormalizado.includes("familyday")
+    );
   }
 
   guardarConfiguracion() {
@@ -716,6 +692,12 @@ class SistemaTurnosMejorado {
   }
 
   popularFormularioDeConfiguracion() {
+    const huboLimpieza = this._eliminarConceptosObsoletos(this.configuracion);
+    if (huboLimpieza) {
+      this.guardarConfiguracion();
+      this.actualizarTiposTurno();
+    }
+
     this.generarTarjetasRecargos();
     this.generarTarjetasExtras();
     this.generarTarjetasTiposTurnoEspeciales();
@@ -875,11 +857,16 @@ class SistemaTurnosMejorado {
     if (!container) return;
     container.innerHTML = "";
 
-    for (const [codigo, tipo] of Object.entries(
-      this.configuracion.tiposTurnoEspeciales
-    )) {
+    let huboEliminaciones = false;
+    for (const [codigo, tipo] of Object.entries(this.configuracion.tiposTurnoEspeciales)) {
+      if (this._esConceptoObsoleto(codigo, tipo?.nombre)) {
+        delete this.configuracion.tiposTurnoEspeciales[codigo];
+        huboEliminaciones = true;
+        continue;
+      }
+
       const tarjeta = document.createElement("div");
-      tarjeta.className = "config-card";
+      tarjeta.className = "config-card config-payroll-card";
       tarjeta.innerHTML = `
         <div class="config-card-header">
           <div class="config-card-color-badge" style="background: ${tipo.color || '#9e9e9e'}" title="Color del concepto"></div>
@@ -889,14 +876,17 @@ class SistemaTurnosMejorado {
         <div class="config-card-body">
           <div class="config-input-group">
             <label for="config-nombre-${codigo}" class="config-label">Nombre</label>
+            <p class="config-input-help">Nombre visible del concepto en la operación diaria.</p>
             <input type="text" id="config-nombre-${codigo}" class="config-input-especial" value="${tipo.nombre}" data-codigo="${codigo}" data-prop="nombre">
           </div>
           <div class="config-input-group">
             <label for="config-horas-${codigo}" class="config-label">Horas Equivalentes</label>
+            <p class="config-input-help">Cantidad de horas que sumará este concepto.</p>
             <input type="number" id="config-horas-${codigo}" class="config-input-especial" value="${tipo.horas}" data-codigo="${codigo}" data-prop="horas" step="0.5">
           </div>
           <div class="config-input-group">
             <label for="config-color-${codigo}" class="config-label">Color</label>
+            <p class="config-input-help">Color usado para identificarlo visualmente.</p>
             <div class="config-color-preview-row">
               <span class="config-color-swatch" style="background: ${tipo.color || '#9e9e9e'}" aria-hidden="true"></span>
               <span class="config-color-value">${tipo.color || '#9e9e9e'}</span>
@@ -906,6 +896,11 @@ class SistemaTurnosMejorado {
         </div>
       `;
       container.appendChild(tarjeta);
+    }
+
+    if (huboEliminaciones) {
+      this.guardarConfiguracion();
+      this.actualizarTiposTurno();
     }
   }
 
@@ -955,28 +950,32 @@ class SistemaTurnosMejorado {
         titulo: "Recargo Nocturno",
         descripcion: "Aplica el recargo de trabajo nocturno y define el horario de inicio y fin.",
         codigoExportacion: "recargoNocturno",
+        color: "#4338ca",
         estado: "Activo",
         mostrarHorario: true,
       },
       recargoFestivo: {
-        icono: "🎉",
+        icono: "🎊",
         titulo: "Recargo Festivo Diurno",
         descripcion: "Recargo aplicado durante días festivos en horario diurno.",
         codigoExportacion: "recargoFestivoDiurno",
+        color: "#0ea5e9",
         estado: "Activo",
       },
       recargoNocturnoFestivo: {
-        icono: "🌙🎉",
+        icono: "🌌",
         titulo: "Recargo Festivo Nocturno",
         descripcion: "Recargo aplicado durante días festivos en horario nocturno.",
         codigoExportacion: "recargoFestivoNocturno",
+        color: "#7c3aed",
         estado: "Activo",
       },
       extraDiurna: {
-        icono: "☀️",
+        icono: "☀",
         titulo: "Hora Extra Diurna",
         descripcion: "Horas extras trabajadas en horario diurno.",
         codigoExportacion: "horasExtrasDiurnas",
+        color: "#ea580c",
         estado: "Activo",
       },
       extraNocturna: {
@@ -984,20 +983,23 @@ class SistemaTurnosMejorado {
         titulo: "Hora Extra Nocturna",
         descripcion: "Horas extras trabajadas en horario nocturno.",
         codigoExportacion: "horasExtrasNocturnas",
+        color: "#9333ea",
         estado: "Activo",
       },
       extraDiurnaFestiva: {
-        icono: "☀️🎉",
+        icono: "🌤",
         titulo: "Hora Extra Festiva Diurna",
         descripcion: "Horas extras diurnas en día festivo.",
         codigoExportacion: "horasExtrasFestivasDiurnas",
+        color: "#dc2626",
         estado: "Activo",
       },
       extraNocturnaFestiva: {
-        icono: "🌙🎉",
+        icono: "🌃",
         titulo: "Hora Extra Festiva Nocturna",
         descripcion: "Horas extras nocturnas en día festivo.",
         codigoExportacion: "horasExtrasFestivasNocturnas",
+        color: "#be185d",
         estado: "Activo",
       },
     };
@@ -1007,6 +1009,7 @@ class SistemaTurnosMejorado {
       titulo: this._formatarNombreConfig(key),
       descripcion: "Ajusta este concepto en la configuración del sistema.",
       codigoExportacion: key,
+      color: "#334155",
       estado: "Activo",
       mostrarHorario: false,
     };
@@ -1014,40 +1017,62 @@ class SistemaTurnosMejorado {
 
   crearTarjetaConcepto(key, config) {
     const metadata = this._obtenerMetaConcepto(key);
+    const valorPorcentaje =
+      Number.isFinite(config?.porcentaje) ? Number(config.porcentaje) : 0;
+    const codigoExportacion =
+      this.configuracion.codigoExportacion?.[metadata.codigoExportacion] || "";
     const tarjeta = document.createElement("div");
-    tarjeta.className = "config-card";
+    tarjeta.className = "config-card config-concept-card";
+    tarjeta.style.setProperty("--concept-color", metadata.color);
 
     tarjeta.innerHTML = `
       <div class="config-card-header">
-        <div class="config-card-icon">${metadata.icono}</div>
-        <div>
+        <div class="config-card-icon" aria-hidden="true">${metadata.icono}</div>
+        <div class="config-card-heading">
           <h3 class="config-card-title">${metadata.titulo}</h3>
           <p class="config-card-description">${metadata.descripcion}</p>
+          <div class="config-card-meta-row">
+            <span class="config-meta-item">
+              <span class="config-meta-label">Color</span>
+              <span class="config-meta-value">
+                <span class="config-color-dot" aria-hidden="true"></span>
+                ${metadata.color}
+              </span>
+            </span>
+            <span class="config-meta-item">
+              <span class="config-meta-label">Código interno</span>
+              <span class="config-meta-value">${metadata.codigoExportacion}</span>
+            </span>
+          </div>
         </div>
-        <span class="status-pill">${metadata.estado}</span>
+        <span class="status-pill" aria-label="Estado del concepto">${metadata.estado}</span>
       </div>
       <div class="config-card-body">
         <div class="config-input-row">
           <div class="config-input-group">
             <label for="config-porcentaje-${key}" class="config-label">Porcentaje</label>
+            <p class="config-input-help">Define el porcentaje aplicado al concepto.</p>
             <div class="config-input-with-suffix">
-              <input type="number" id="config-porcentaje-${key}" class="config-input" value="${config.porcentaje}" step="1" min="0" max="500">
+              <input type="number" id="config-porcentaje-${key}" class="config-input" value="${valorPorcentaje}" step="1" min="0" max="500" placeholder="Ej. 35" required>
               <span class="input-suffix">%</span>
             </div>
           </div>
           <div class="config-input-group">
             <label for="config-codigo-${key}" class="config-label">Código de exportación</label>
-            <input type="text" id="config-codigo-${key}" class="config-input config-input-codigo-export" value="${this.configuracion.codigoExportacion?.[metadata.codigoExportacion] || ""}" data-codigo-key="${metadata.codigoExportacion}" maxlength="5" placeholder="Ej. 045">
+            <p class="config-input-help">Usa el código oficial para el archivo de nómina.</p>
+            <input type="text" id="config-codigo-${key}" class="config-input config-input-codigo-export" value="${codigoExportacion}" data-codigo-key="${metadata.codigoExportacion}" maxlength="5" pattern="\\d{2,5}" inputmode="numeric" placeholder="Ej. 045" required>
           </div>
         </div>
         ${metadata.mostrarHorario ? `
           <div class="config-input-row config-time-row">
             <div class="config-input-group">
               <label for="config-inicio-recargoNocturno" class="config-label">Inicio nocturno</label>
+              <p class="config-input-help">Hora inicial para aplicar recargo nocturno.</p>
               <input type="time" id="config-inicio-recargoNocturno" class="config-input" value="${config.inicio || "19:00"}">
             </div>
             <div class="config-input-group">
               <label for="config-fin-recargoNocturno" class="config-label">Fin nocturno</label>
+              <p class="config-input-help">Hora final del rango nocturno.</p>
               <input type="time" id="config-fin-recargoNocturno" class="config-input" value="${config.fin || "06:00"}">
             </div>
           </div>
@@ -1068,11 +1093,12 @@ class SistemaTurnosMejorado {
         btnAddShift.addEventListener("click", () => this.agregarNuevoTurnoDinamico());
     }
     // Evento para restaurar valores por defecto
-    document
-      .getElementById("btn-reset-config")
-      .addEventListener("click", () => {
+    const btnResetConfig = document.getElementById("btn-reset-config");
+    if (btnResetConfig) {
+      btnResetConfig.addEventListener("click", () => {
         this.restaurarConfiguracionPorDefecto();
       });
+    }
 
     // Eventos para inputs de configuración
     document.querySelectorAll(".config-input").forEach((input) => {
@@ -1082,21 +1108,25 @@ class SistemaTurnosMejorado {
     });
 
     // Eventos para inputs de horario nocturno
-    document
-      .getElementById("config-inicio-recargoNocturno")
-      .addEventListener("change", () => {
+    const inicioNocturno = document.getElementById("config-inicio-recargoNocturno");
+    const finNocturno = document.getElementById("config-fin-recargoNocturno");
+    const porcentajeNocturno = document.getElementById("config-porcentaje-recargoNocturno");
+
+    if (inicioNocturno) {
+      inicioNocturno.addEventListener("change", () => {
         this.actualizarConfiguracionEnTiempoReal();
       });
-    document
-      .getElementById("config-fin-recargoNocturno")
-      .addEventListener("change", () => {
+    }
+    if (finNocturno) {
+      finNocturno.addEventListener("change", () => {
         this.actualizarConfiguracionEnTiempoReal();
       });
-    document
-      .getElementById("config-porcentaje-recargoNocturno")
-      .addEventListener("input", () => {
+    }
+    if (porcentajeNocturno) {
+      porcentajeNocturno.addEventListener("input", () => {
         this.actualizarConfiguracionEnTiempoReal();
       });
+    }
 
     // Eventos para la sección de tipos de turno especiales
     const container = document.getElementById(
@@ -1220,6 +1250,13 @@ class SistemaTurnosMejorado {
    * Actualiza la configuración en tiempo real
    */
   actualizarConfiguracionEnTiempoReal() {
+    const huboLimpieza = this._eliminarConceptosObsoletos(this.configuracion);
+    if (huboLimpieza) {
+      this.guardarConfiguracion();
+      this.actualizarTiposTurno();
+      this.generarTarjetasTiposTurnoEspeciales();
+    }
+
     // Actualizar recargos
     const recargos = ["recargoFestivo", "recargoNocturnoFestivo"];
     recargos.forEach((key) => {
@@ -1277,7 +1314,7 @@ class SistemaTurnosMejorado {
     document.querySelectorAll('.config-input-codigo-export').forEach((input) => {
       const key = input.dataset.codigoKey;
       if (key) {
-        this.configuracion.codigoExportacion[key] = input.value.trim();
+        this.configuracion.codigoExportacion[key] = input.value.replace(/\D/g, "").trim();
       }
     });
 
@@ -1582,7 +1619,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
 
     // Fallback: intentar cargar usando fetch (funciona con servidor local)
     contenedor.innerHTML = "<p>Cargando manual...</p>";
-    fetch('./instructivo.md')
+    fetch('./archivos/instructivo.md')
       .then(response => {
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         return response.text();
@@ -1597,7 +1634,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         contenedor.innerHTML = `
           <div style="color: #721c24; padding: 20px; border: 1px solid #f5c6cb; border-radius: 8px; background: #f8d7da;">
             <h3>❌ Error al cargar el manual</h3>
-            <p><strong>Archivo buscado:</strong> <code>instructivo.md</code></p>
+            <p><strong>Archivo buscado:</strong> <code>archivos/instructivo.md</code></p>
             <p><strong>Error:</strong> ${error.message}</p>
             <p>Para resolver este problema, ejecute la aplicación desde un servidor local.</p>
           </div>
@@ -2560,52 +2597,24 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       return hours * 60 + minutes;
     };
 
-    const inicioTurnoMin = timeToMinutes(inicioTurnoStr);
-    let finTurnoMin = timeToMinutes(finTurnoStr);
-    if (finTurnoMin <= inicioTurnoMin) {
-      finTurnoMin += 24 * 60;
-    }
-
-    const duracionTotalMin = finTurnoMin - inicioTurnoMin;
-    if (duracionTotalMin <= 0) return;
-
-    // Determinar ventanas de almuerzo según la configuración
+    // Determinar configuración de alimentación final para este cálculo
     let confAlm = this.configuracionAlmuerzo || (typeof this.obtenerConfiguracionAlmuerzo === 'function' ? this.obtenerConfiguracionAlmuerzo() : { tipo: 'predefinido', tiempoEnHoras: 0.5 });
     if (descontarAlimentacion === false) {
       confAlm = { tipo: 'sin-almuerzo', tiempoEnHoras: 0 };
     }
-    const turnoOrig = { inicio: inicioTurnoStr, fin: finTurnoStr };
     const es24h = (inicioTurnoStr === finTurnoStr);
 
-    // Calcular la cantidad primaria de minutos de alimentación que se aplican AL INICIO
-    const { primary: primaryMin, extraWindows } = this._calcularMinutosAlmuerzoPrimario(inicioTurnoStr, finTurnoStr, confAlm, es24h);
+    const ctxTurno = this._obtenerContextoAlimentacionTurno(
+      inicioTurnoStr,
+      finTurnoStr,
+      confAlm,
+      es24h
+    );
 
-    // Determinar el inicio efectivo del recorrido minuto-a-minuto
-    const loopStart = inicioTurnoMin + (primaryMin || 0);
-    if (loopStart >= finTurnoMin) return; // No hay minutos laborados después de la alimentación
-
-    // Construir ventanas de almuerzo restantes (solo conservar ventanas adicionales en 24h)
-    let adjustedLunch = [];
-    if (es24h) {
-      const lunchWindows = this.obtenerVentanasAlmuerzo(inicioTurnoStr, finTurnoStr, confAlm, es24h).slice();
-      // Si la función original devolvía 2 ventanas (predefinido en 24h),
-      // reemplazamos la primera por la primaria aplicada al inicio y conservamos la segunda.
-      if (lunchWindows.length > 1) {
-        lunchWindows.sort((a, b) => a.start - b.start);
-        lunchWindows.shift();
-      } else if (extraWindows && extraWindows.length) {
-        lunchWindows.push(...extraWindows);
-      }
-      // Ajustar/recortar ventanas para que solo consideren minutos >= loopStart
-      for (const w of lunchWindows) {
-        const ws = Math.max(w.start, loopStart);
-        const we = Math.min(w.end, finTurnoMin);
-        if (we > ws) adjustedLunch.push({ start: ws, end: we });
-      }
-    }
+    if (ctxTurno.inicioEfectivo >= ctxTurno.finProgramado) return;
 
     const isInLunchAbs = (absMinute) => {
-      for (const w of adjustedLunch) {
+      for (const w of ctxTurno.ventanasNoLaboradas) {
         if (absMinute >= w.start && absMinute < w.end) return true;
       }
       return false;
@@ -2619,7 +2628,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     const inicioNocturnoMin = timeToMinutes(inicioNocturnoStr);
     const finNocturnoMin = timeToMinutes(finNocturnoStr);
 
-    for (let minuto = loopStart; minuto < finTurnoMin; minuto++) {
+    for (let minuto = ctxTurno.inicioEfectivo; minuto < ctxTurno.finProgramado; minuto++) {
       // Saltar minutos de almuerzo usando ventanas absolutas (ajustadas)
       if (isInLunchAbs(minuto)) continue;
       // minutoDelDia: minuto del día 0..1439

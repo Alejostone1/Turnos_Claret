@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Control de Turnos y Horas Extras</title>
-    <link rel="stylesheet" href="TURNOS.css">
+    <link rel="stylesheet" href="archivos/TURNOS.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -315,7 +315,7 @@
                     <!-- Panel de Configuraciones -->
                     <div class="config-panel-body">
                         <div class="config-panel-grid">
-                            <section class="config-group">
+                            <section class="config-group config-group--recargos">
                                 <div class="config-group-header">
                                     <h2 class="config-group-title">
                                         <span class="section-icon">💰</span>
@@ -328,7 +328,7 @@
                                 <div id="config-recargos-group" class="config-cards-grid"></div>
                             </section>
 
-                            <section class="config-group">
+                            <section class="config-group config-group--extras">
                                 <div class="config-group-header">
                                     <h2 class="config-group-title">
                                         <span class="section-icon">⏰</span>
@@ -343,7 +343,7 @@
                         </div>
                     </div>
 
-    <div class="config-section config-conceptos-nomina" style="grid-column: 1 / -1; margin-top: 2rem; border-top: 1px solid #e5e7eb; padding-top: 2rem;">
+    <div class="config-section config-conceptos-nomina">
         <div class="config-section-header">
             <h2 class="config-section-title">
                 <span class="section-icon">📋</span>
@@ -353,10 +353,10 @@
                 Define las horas y nombres para conceptos como incapacidades, vacaciones, y otros permisos.
             </p>
         </div>
-                        <div id="config-tipos-turno-especiales-container" class="config-cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+                        <div id="config-tipos-turno-especiales-container" class="config-cards-grid">
                             <!-- Las tarjetas de configuración para tipos de turno especiales se generarán aquí -->
                         </div>
-                        <div class="config-footer-actions" style="margin-top: 1.5rem; text-align: left;">
+                        <div class="config-footer-actions config-footer-actions-inline">
                              <button id="btn-agregar-tipo-turno" class="config-btn config-btn-secondary">
                                 <span class="btn-icon">➕</span>
                                 Agregar Nuevo Concepto
@@ -442,7 +442,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="instructivo.js"></script>
-    <script src="TURNOS.js"></script>
+    <script src="archivos/instructivo.js"></script>
+    <script src="archivos/TURNOS.js"></script>
 </body>
 </html>

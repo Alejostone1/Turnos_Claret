@@ -3278,3 +3278,442 @@ body {
         font-size: 0.95rem;
     }
 }
+
+/* ========================================
+   REDISEÑO UX/UI: CONFIGURACIÓN RECARGOS/EXTRAS
+   ======================================== */
+
+.config-panel-container {
+    max-width: 1320px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08);
+}
+
+.config-panel-header,
+.config-panel-footer {
+    background: #ffffff;
+    border-color: #e2e8f0;
+}
+
+.config-panel-body {
+    min-height: auto;
+    padding: 2rem;
+    background: #f8fafc;
+}
+
+.config-panel-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+
+.config-group {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.25rem;
+    gap: 1.25rem;
+}
+
+.config-group-header {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+}
+
+.config-group-title {
+    font-size: 1.35rem;
+}
+
+.config-group-description {
+    font-size: 0.95rem;
+    color: #475569;
+}
+
+.config-cards-grid,
+#config-recargos-group,
+#config-extras-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.config-cards-grid {
+    align-items: stretch;
+}
+
+.config-concept-card {
+    --concept-color: #334155;
+    display: flex;
+    flex-direction: column;
+    min-height: 320px;
+    height: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.config-concept-card::before {
+    background: linear-gradient(90deg, var(--concept-color), #0f172a);
+}
+
+.config-concept-card:hover {
+    transform: translateY(-2px);
+    border-color: #cbd5e1;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.config-concept-card .config-card-header {
+    grid-template-columns: auto 1fr auto;
+    gap: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.config-concept-card .config-card-heading {
+    min-width: 0;
+}
+
+.config-concept-card .config-card-icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 12px;
+    font-size: 1.2rem;
+    background: var(--concept-color);
+    box-shadow: 0 8px 16px rgba(15, 23, 42, 0.2);
+}
+
+.config-concept-card .config-card-title {
+    font-size: 1.02rem;
+}
+
+.config-concept-card .config-card-description {
+    margin-top: 0.25rem;
+    min-height: 40px;
+    font-size: 0.87rem;
+    line-height: 1.4;
+    color: #475569;
+}
+
+.config-card-meta-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+}
+
+.config-meta-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.5rem 0.6rem;
+    background: #f8fafc;
+    min-height: 54px;
+}
+
+.config-meta-label {
+    display: block;
+    color: #64748b;
+    font-size: 0.74rem;
+    font-weight: 600;
+    margin-bottom: 0.2rem;
+}
+
+.config-meta-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #0f172a;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.config-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--concept-color);
+    border: 1px solid rgba(15, 23, 42, 0.2);
+}
+
+.status-pill {
+    font-size: 0.76rem;
+    padding: 0.35rem 0.65rem;
+    color: #166534;
+    background: #dcfce7;
+}
+
+.config-concept-card .config-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.config-concept-card .config-input-row {
+    gap: 0.85rem;
+}
+
+.config-concept-card .config-input-group {
+    gap: 0.4rem;
+}
+
+.config-concept-card .config-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.config-input-help {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #64748b;
+    line-height: 1.3;
+}
+
+.config-concept-card .config-input {
+    height: 42px;
+    padding: 0.7rem 0.8rem;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    font-size: 0.95rem;
+}
+
+.config-concept-card .config-input:focus {
+    border-color: var(--concept-color);
+    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1);
+}
+
+.config-concept-card .config-input:invalid {
+    border-color: #ef4444;
+    background: #fef2f2;
+}
+
+.config-concept-card .config-time-row {
+    grid-template-columns: 1fr 1fr;
+}
+
+.config-concept-card .config-input-with-suffix .config-input {
+    padding-right: 2rem;
+}
+
+.config-conceptos-nomina {
+    grid-column: 1 / -1;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    border-left: 0;
+}
+
+.config-conceptos-nomina::before {
+    display: none;
+}
+
+#config-tipos-turno-especiales-container {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.config-footer-actions-inline {
+    margin-top: 1.5rem;
+    text-align: left;
+}
+
+@media (max-width: 1200px) {
+    .config-panel-grid,
+    .config-cards-grid,
+    #config-recargos-group,
+    #config-extras-group {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .config-panel-body {
+        padding: 1rem;
+    }
+
+    .config-group {
+        padding: 1rem;
+    }
+
+    .config-concept-card {
+        min-height: 0;
+    }
+
+    .config-card-meta-row,
+    .config-concept-card .config-input-row,
+    .config-concept-card .config-time-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================
+   REDISEÑO UX/UI: CONCEPTOS DE NÓMINA
+   ======================================== */
+
+#seccion-sistema-configuracion .config-conceptos-nomina {
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+}
+
+#seccion-sistema-configuracion .config-conceptos-nomina .config-section-header {
+    margin-bottom: 1.25rem;
+    text-align: left;
+}
+
+#seccion-sistema-configuracion .config-conceptos-nomina .config-section-title {
+    justify-content: flex-start;
+    font-size: 1.4rem;
+    color: #0f172a;
+    text-shadow: none;
+    gap: 0.6rem;
+}
+
+#seccion-sistema-configuracion .config-conceptos-nomina .section-icon {
+    font-size: 1.15rem;
+    -webkit-text-fill-color: initial;
+    filter: none;
+}
+
+#seccion-sistema-configuracion .config-conceptos-nomina .config-section-desc {
+    text-align: left;
+    font-size: 0.92rem;
+    color: #475569;
+    font-weight: 500;
+    margin: 0.35rem 0 0;
+    max-width: none;
+}
+
+#config-tipos-turno-especiales-container {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-top: 0.75rem;
+    padding-top: 0;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card {
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    background: #ffffff;
+    min-height: 360px;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card::before {
+    height: 3px;
+    background: linear-gradient(90deg, #2563eb, #0ea5e9);
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-card-header {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-card-header::before {
+    display: none;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-card-color-badge {
+    width: 12px;
+    height: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.2);
+    box-shadow: none;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-card-title {
+    font-size: 1rem;
+    color: #0f172a;
+    font-weight: 700;
+    padding-left: 0;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .btn-delete-tipo-turno {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: #ef4444;
+    box-shadow: none;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 1rem;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-input-group {
+    gap: 0.35rem;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-label::before {
+    display: none;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-input-help {
+    margin: 0;
+    font-size: 0.74rem;
+    color: #64748b;
+    line-height: 1.3;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-input-especial,
+#config-tipos-turno-especiales-container .config-payroll-card .config-input {
+    height: 40px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.92rem;
+    font-weight: 500;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-input-especial:focus,
+#config-tipos-turno-especiales-container .config-payroll-card .config-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    outline: none;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-color-preview-row {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 0.5rem 0.7rem;
+}
+
+#config-tipos-turno-especiales-container .config-payroll-card .config-input-color {
+    height: 38px;
+    padding: 0.25rem 0.35rem;
+}
+
+@media (max-width: 768px) {
+    #seccion-sistema-configuracion .config-conceptos-nomina {
+        padding: 1rem;
+    }
+
+    #seccion-sistema-configuracion .config-conceptos-nomina .config-section-title {
+        font-size: 1.2rem;
+    }
+}

@@ -13,8 +13,8 @@ function createWindow() {
     }
   });
 
-  // Carga tu archivo TURNOS.html en la ventana.
-  mainWindow.loadFile('TURNOS.html');
+  // Carga la vista principal en la raíz del proyecto.
+  mainWindow.loadFile(path.join(__dirname, '..', 'INICIO_TURNOS.html'));
 }
 
 // Listener para el evento de guardado de archivo desde la interfaz
