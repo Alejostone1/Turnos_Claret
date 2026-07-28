@@ -579,18 +579,6 @@ class SistemaTurnosMejorado {
       };
     }
 
-    const conceptosACorregir = {
-        'I': 7,
-        'PR': 7,
-        'V': 7
-    };
-
-    for (const [codigo, horas] of Object.entries(conceptosACorregir)) {
-        if (config.tiposTurnoEspeciales[codigo] && config.tiposTurnoEspeciales[codigo].horas !== horas) {
-            config.tiposTurnoEspeciales[codigo].horas = horas;
-        }
-    }
-
     // FASE 1: Migración a Turnos Dinámicos
     if (!config.turnosDinamicos) {
       // Auto-inyección de los turnos base para mantener retrocompatibilidad
@@ -682,6 +670,54 @@ class SistemaTurnosMejorado {
       nombreNormalizado.includes("diafamilia") ||
       nombreNormalizado.includes("familyday")
     );
+  }
+
+  _normalizarTexto(valor) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]/g, "");
+  }
+
+  _esConceptoConHorasEquivalentesParaTope(codigo, tipoConfig) {
+    const codigoNormalizado = this._normalizarTexto(codigo);
+    const nombreNormalizado = this._normalizarTexto(tipoConfig?.nombre);
+    const descripcionNormalizada = this._normalizarTexto(tipoConfig?.descripcion);
+
+    if (["i", "pr", "v"].includes(codigoNormalizado)) return true;
+
+    const texto = `${nombreNormalizado} ${descripcionNormalizada}`;
+    return (
+      texto.includes("incapac") ||
+      texto.includes("vacacion") ||
+      (texto.includes("permiso") && texto.includes("remuner"))
+    );
+  }
+
+  _obtenerHorasEquivalentesParaTope(codigoTurno) {
+    const tipoConfig = this.configuracion?.tiposTurnoEspeciales?.[codigoTurno];
+    if (!tipoConfig) return 0;
+    if (!this._esConceptoConHorasEquivalentesParaTope(codigoTurno, tipoConfig)) {
+      return 0;
+    }
+    const horas = parseFloat(tipoConfig.horas);
+    return Number.isFinite(horas) && horas > 0 ? horas : 0;
+  }
+
+  _obtenerTurnoAsignadoParaDia(empleado, semanaNumero, indexDia, fechaDia) {
+    const fechaKey = fechaDia.toISOString().split("T")[0];
+    const turnoGuardado = empleado.turnosGuardados.get(fechaKey);
+    if (turnoGuardado && turnoGuardado.turno) {
+      return { turno: turnoGuardado.turno, turnoGuardado };
+    }
+
+    const selector = document.querySelector(
+      `[data-empleado="${empleado.documento}"][data-semana="${semanaNumero}"][data-dia="${indexDia}"]`
+    );
+    const turno = selector ? selector.value : null;
+    return { turno, turnoGuardado: null };
   }
 
   guardarConfiguracion() {
@@ -1215,16 +1251,16 @@ class SistemaTurnosMejorado {
         extraDiurnaFestiva: { porcentaje: 115 },
         extraNocturnaFestiva: { porcentaje: 165 },
         tiposTurnoEspeciales: {
-          I: { nombre: "Incapacitado", horas: 7.33, descripcion: "Incapacidad" },
+          I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad" },
           SC: { nombre: "Sin contrato", horas: 0, descripcion: "Sin contrato" },
         
           PR: {
             nombre: "Permiso remunerado",
-            horas: 7.33,
+            horas: 7,
             descripcion: "Permiso remunerado",
           },
           A: { nombre: "Ausencia", horas: 0, descripcion: "Ausencia" },
-          V: { nombre: "Vacaciones", horas: 7.33, descripcion: "Vacaciones" },
+          V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones" },
         },
         codigoExportacion: {
           horasExtrasDiurnas: "045",
@@ -2474,6 +2510,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       extrasNocturnasFestivas: 0,
       totalHoras: 0,
       horasEfectivasParaExtras: 0,
+      horasEquivalentesTope: 0,
       horasDeuda: 0,
     };
 
@@ -2498,34 +2535,31 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       horasTurno = turnoConfig.horas;
     }
 
+    if (this.configuracion.tiposTurnoEspeciales[tipoTurno]) {
+      // Los conceptos especiales NO se clasifican como horas trabajadas.
+      // Solo algunos conceptos suman al tope semanal vía horas equivalentes.
+      resultado.horasEquivalentesTope = this._obtenerHorasEquivalentesParaTope(tipoTurno);
+      return resultado;
+    }
+
     const turnosEfectivos = Object.keys(this.configuracion.turnosDinamicos || {}).concat(["M"]);
     if (turnosEfectivos.includes(tipoTurno)) {
       resultado.horasEfectivasParaExtras = horasTurno;
-    }
-
-    const turnosNoContratados = Object.keys(
-      this.configuracion.tiposTurnoEspeciales
-    ).filter((k) => this.configuracion.tiposTurnoEspeciales[k].horas === 0);
-    if (!turnosNoContratados.includes(tipoTurno)) {
       resultado.totalHoras = horasTurno;
     }
 
-    if (this.configuracion.tiposTurnoEspeciales[tipoTurno]) {
-      resultado.horasOrdinarias += horasTurno;
-    } else {
-      const turnoDinamico = this.configuracion.turnosDinamicos[tipoTurno];
-      if (turnoDinamico) {
-        this._procesarTurnoDetallado(
-          resultado,
-          fecha,
-          horasTurno,
-          turnoDinamico.inicio,
-          turnoDinamico.fin,
-          horasAcumuladasParaExtras,
-          horasMaximas,
-          turnoDinamico.descontarAlimentacion !== false
-        );
-      }
+    const turnoDinamico = this.configuracion.turnosDinamicos[tipoTurno];
+    if (turnoDinamico) {
+      this._procesarTurnoDetallado(
+        resultado,
+        fecha,
+        horasTurno,
+        turnoDinamico.inicio,
+        turnoDinamico.fin,
+        horasAcumuladasParaExtras,
+        horasMaximas,
+        turnoDinamico.descontarAlimentacion !== false
+      );
     }
 
     return resultado;
@@ -2750,17 +2784,13 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       // --- PASO 1: ANÁLISIS PREVIO DE LA SEMANA COMPLETA ---
       // Obtener turnos de TODA la semana, incluyendo días fuera de rango (opacos)
       const turnosDeLaSemanaCompleta = semana.dias.map((dia, index) => {
-        const fechaKey = dia.fecha.toISOString().split('T')[0];
-        // Primero buscar en turnosGuardados (datos persistentes)
-        const turnoGuardado = empleado.turnosGuardados.get(fechaKey);
-        if (turnoGuardado) {
-          return turnoGuardado.turno;
-        }
-        // CORREGIDO: Buscar en el selector del DOM para TODOS los días
-        const selector = document.querySelector(
-          `[data-empleado="${empleado.documento}"][data-semana="${semana.numero}"][data-dia="${index}"]`
+        const asignacion = this._obtenerTurnoAsignadoParaDia(
+          empleado,
+          semana.numero,
+          index,
+          dia.fecha
         );
-        return selector ? selector.value : null;
+        return asignacion.turno;
       });
 
       const turnosConsideradosTrabajados = Object.keys(this.configuracion.turnosDinamicos || {}).concat(["M"]);
@@ -2771,7 +2801,9 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
 
       // --- PASO 2: CÁLCULO DEL TOPE DE HORAS SEMANALES ---
       const turnosSemana = [];
-      let horasAcumuladasSemana = 0;
+      let horasTrabajadasSemana = 0;
+      let horasEquivalentesSemana = 0;
+      const detalleHorasEquivalentesSemana = {};
 
       // El tope semanal es SIEMPRE 42 horas
       // No se reduce por festivos, domingos, incapacidades, vacaciones ni otros conceptos
@@ -2791,18 +2823,14 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         // Guardar el acumulado ANTES de este día
         horasAcumuladasPorDia[index] = horasAcumuladasParaExtras;
 
-        const fechaKey = dia.fecha.toISOString().split('T')[0];
-        const turnoGuardado = empleado.turnosGuardados.get(fechaKey);
-        let turno = turnoGuardado ? turnoGuardado.turno : null;
-
-        // CORREGIDO: Buscar en DOM para TODOS los días (no solo los que están en rango)
-        // Esto permite considerar las horas de días opacos para el cálculo de extras
-        if (!turno) {
-          const selector = document.querySelector(
-            `[data-empleado="${empleado.documento}"][data-semana="${semana.numero}"][data-dia="${index}"]`
-          );
-          turno = selector ? selector.value : null;
-        }
+        const asignacionTurnoDia = this._obtenerTurnoAsignadoParaDia(
+          empleado,
+          semana.numero,
+          index,
+          dia.fecha
+        );
+        const turnoGuardado = asignacionTurnoDia.turnoGuardado;
+        const turno = asignacionTurnoDia.turno;
 
         let resultadoDelTurno = {
           horasOrdinarias: 0,
@@ -2815,8 +2843,11 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
           extrasNocturnasFestivas: 0,
           totalHoras: 0,
           horasEfectivasParaExtras: 0,
+          horasEquivalentesTope: 0,
           horasDeuda: 0,
         };
+
+        const horasEquivalentesDia = this._obtenerHorasEquivalentesParaTope(turno);
 
         if (turno && turnosConsideradosTrabajados.includes(turno)) {
           let horasTurno = 0;
@@ -2888,6 +2919,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
               extrasNocturnasFestivas: 0,
               totalHoras: horasCalculadas,
               horasEfectivasParaExtras: horasCalculadas,
+              horasEquivalentesTope: 0,
               horasDeuda: 0,
             };
 
@@ -2914,7 +2946,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
             resultadoDelTurno.fin = this.tiposTurno[turno]?.fin || null;
           }
 
-          horasAcumuladasSemana += resultadoDelTurno.totalHoras;
+          horasTrabajadasSemana += resultadoDelTurno.totalHoras;
         } else if (turno) {
           // Mostrar cualquier turno no productivo o concepto especial (C, SC, V, I, etc.)
           resultadoDelTurno = {
@@ -2928,10 +2960,18 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
             extrasNocturnasFestivas: 0,
             totalHoras: 0,
             horasEfectivasParaExtras: 0,
+            horasEquivalentesTope: horasEquivalentesDia,
             horasDeuda: 0,
             inicio: this.tiposTurno[turno]?.inicio || null,
             fin: this.tiposTurno[turno]?.fin || null,
           };
+        }
+
+        if (horasEquivalentesDia > 0) {
+          horasEquivalentesSemana += horasEquivalentesDia;
+          horasAcumuladasParaExtras += horasEquivalentesDia;
+          detalleHorasEquivalentesSemana[turno] =
+            (detalleHorasEquivalentesSemana[turno] || 0) + horasEquivalentesDia;
         }
 
         turnosSemana.push({
@@ -2941,23 +2981,13 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
           esFestivo: dia.esFestivo,
           ...resultadoDelTurno,
         });
-
-        // Considerar horas de conceptos especiales fuera de rango para el total de la semana
-        if (!dia.enRango && dia.fecha.getDay() !== 0) {
-          const fechaKey = dia.fecha.toISOString().split('T')[0];
-          const turnoGuardado = empleado.turnosGuardados.get(fechaKey);
-          const turno = turnoGuardado ? turnoGuardado.turno : null;
-          const tipoConfig = this.configuracion.tiposTurnoEspeciales[turno];
-          if (tipoConfig) {
-            horasAcumuladasSemana += tipoConfig.horas;
-          }
-        }
       });
 
       const resumenSemana = this.calcularResumenSemana(turnosSemana);
+      const horasAcumuladasParaTope = horasTrabajadasSemana + horasEquivalentesSemana;
       resumenSemana.horasDeuda = Math.max(
         0,
-        horasMaximasAjustadas - horasAcumuladasSemana
+        horasMaximasAjustadas - horasAcumuladasParaTope
       );
       resultadosSemanas.push({
         numero: semana.numero,
@@ -2966,6 +2996,9 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         turnos: turnosSemana,
         resumen: resumenSemana,
         horasMaximas: horasMaximasAjustadas,
+        horasEquivalentesTope: horasEquivalentesSemana,
+        horasAcumuladasParaTope,
+        detalleHorasEquivalentesTope: detalleHorasEquivalentesSemana,
       });
     });
         empleado.resultados = resultadosSemanas;
@@ -3058,6 +3091,20 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
 
         if (!empleado.resultados) return;
         empleado.resultados.forEach((semana) => {
+      const horasEquivalentesTope = semana.horasEquivalentesTope || 0;
+      const detalleEquivalentes = Object.entries(
+        semana.detalleHorasEquivalentesTope || {}
+      ).map(([codigo, horas]) => {
+        const nombre = this.tiposTurno[codigo]?.nombre || codigo;
+        return `${codigo} (${nombre}): ${Number(horas).toFixed(1)}h`;
+      });
+      const tooltipEquivalentes = detalleEquivalentes.length
+        ? `Acumulado por conceptos especiales para tope semanal: ${detalleEquivalentes.join(", ")}`
+        : "No hay horas equivalentes por conceptos especiales en esta semana.";
+      const detalleVisible = detalleEquivalentes.length
+        ? ` (${detalleEquivalentes.join(" · ")})`
+        : "";
+
       const divSemana = document.createElement("div");
       divSemana.className = "resultado-semana";
       divSemana.innerHTML = `
@@ -3067,7 +3114,9 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       )} - ${semana.finSemana.toLocaleDateString("es-ES")})</h4>
         <p class="tope-horas">Tope de horas para esta semana: ${
           semana.horasMaximas
-        } horas</p>
+        } horas
+        <span class="tope-equivalentes" title="${tooltipEquivalentes.replace(/"/g, "&quot;")}">• Horas equivalentes (I/PR/V): ${horasEquivalentesTope.toFixed(1)}h${detalleVisible}</span>
+        </p>
         <div class="tabla-contenedor">
           <table class="tabla-turnos">
             <thead>
