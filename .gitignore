@@ -1,0 +1,18 @@
+# Node / Electron
+node_modules/
+archivos/node_modules/
+npm-debug.log*
+
+# Vercel
+.vercel/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Temporary artifacts
+*.tmp
+*.temp
