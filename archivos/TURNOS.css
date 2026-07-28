@@ -946,6 +946,14 @@ body {
   margin-bottom: var(--espaciado-md);
 }
 
+.tope-equivalentes {
+  display: inline-block;
+  margin-left: 10px;
+  color: #7c2d12;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
 
 /* Badges de turnos mejorados */
 /* Los colores de badges y selectores se aplican dinámicamente según la configuración de cada turno */

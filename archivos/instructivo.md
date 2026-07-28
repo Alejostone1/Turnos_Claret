@@ -213,10 +213,12 @@ No se aplica reducción automática del tope por:
 
 - Festivos no trabajados.
 - Domingos.
-- Incapacidades.
-- Vacaciones.
-- Permisos remunerados.
 - Otros conceptos especiales.
+
+Excepción vigente para cálculo interno de tope:
+
+- `I` (Incapacitado), `PR` (Permiso remunerado) y `V` (Vacaciones) sí suman su valor de **Horas Equivalentes** configurado (por defecto 7h) al acumulador semanal de 42h.
+- Estas horas equivalentes **no** se convierten en horas ordinarias, recargos ni extras en la tabla de resultados; solo afectan el momento en que el sistema empieza a clasificar horas laboradas como extra.
 
 ## 10.2 Distribución de extras
 
@@ -251,8 +253,8 @@ Si se trabaja domingo y no hay día libre en la semana, el sistema puede forzar 
 
 ## 12.2 Comportamiento general
 
-- Los conceptos pueden reflejar horas equivalentes para consolidado.
-- No reemplazan la lógica de tope fijo semanal de 42 horas.
+- `I`, `PR` y `V` aportan horas equivalentes al cálculo interno del tope semanal (42h), usando siempre el valor configurado por el administrador.
+- Esas horas equivalentes no se muestran como horas trabajadas ni como conceptos liquidables.
 
 ## 12.3 Eliminación de Día de la Familia
 
@@ -380,4 +382,3 @@ En web usa descarga del navegador; en Electron usa diálogo de guardado nativo.
 ---
 
 *Sistema de Control de Turnos v4.8 — © 2026 Alejostone — Todos los derechos reservados.*
-
