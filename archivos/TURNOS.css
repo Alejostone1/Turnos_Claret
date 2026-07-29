@@ -954,6 +954,20 @@ body {
   font-size: 0.9rem;
 }
 
+.tope-negativo {
+  color: #b91c1c;
+  background-color: #fee2e2;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tope-sc {
+  color: #1e40af;
+  background-color: #dbeafe;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
 
 /* Badges de turnos mejorados */
 /* Los colores de badges y selectores se aplican dinámicamente según la configuración de cada turno */

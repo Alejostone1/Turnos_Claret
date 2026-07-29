@@ -548,17 +548,17 @@ class SistemaTurnosMejorado {
         extraNocturnaFestiva: { porcentaje: 165 },
         tiposTurnoEspeciales: {
           I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad" },
-          SC: { nombre: "Sin contrato", horas: 0, descripcion: "Sin contrato" },
-       
+          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato" },
           PR: {
             nombre: "Permiso remunerado",
             horas: 7,
             descripcion: "Permiso remunerado",
             color: "#66BB6A"
           },
-          A: { nombre: "Ausencia", horas: 0, descripcion: "Ausencia", color: "#EF5350" },
+          A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia", color: "#EF5350" },
           V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones", color: "#2E7D32" },
         },
+        versionConceptos: 2,
       };
     }
     const huboLimpiezaInicial = this._eliminarConceptosObsoletos(config);
@@ -567,16 +567,24 @@ class SistemaTurnosMejorado {
     if (!config.tiposTurnoEspeciales) {
       config.tiposTurnoEspeciales = {
         I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad", color: "#42A5F5" },
-        SC: { nombre: "Sin contrato", horas: 0, descripcion: "Sin contrato", color: "#BDBDBD" },
+        SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#BDBDBD" },
         PR: {
           nombre: "Permiso remunerado",
           horas: 7,
           descripcion: "Permiso remunerado",
           color: "#66BB6A"
         },
-        A: { nombre: "Ausencia", horas: 0, descripcion: "Ausencia", color: "#EF5350" },
+        A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia", color: "#EF5350" },
         V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones", color: "#2E7D32" },
       };
+    }
+
+    // Migración v2: A y SC pasan a tener horas equivalentes funcionales (7h)
+    if (!config.versionConceptos || config.versionConceptos < 2) {
+      const esp = config.tiposTurnoEspeciales;
+      if (esp?.A && esp.A.horas === 0) esp.A.horas = 7;
+      if (esp?.SC && esp.SC.horas === 0) esp.SC.horas = 7;
+      config.versionConceptos = 2;
     }
 
     // FASE 1: Migración a Turnos Dinámicos
@@ -704,6 +712,52 @@ class SistemaTurnosMejorado {
     }
     const horas = parseFloat(tipoConfig.horas);
     return Number.isFinite(horas) && horas > 0 ? horas : 0;
+  }
+
+  /**
+   * Determina el comportamiento de un concepto especial respecto al tope semanal:
+   * 'suma'        → I, PR, V: suma horas equivalentes al acumulador (ayuda a alcanzar el tope)
+   * 'resta'       → A: resta horas equivalentes del acumulador (dificulta alcanzar el tope)
+   * 'reduce_tope' → SC: reduce el tope semanal (solo lunes–sábado, nunca domingo)
+   * 'ninguno'     → sin efecto sobre el tope
+   */
+  _obtenerComportamientoConceptoEspecial(codigo) {
+    const tipoConfig = this.configuracion?.tiposTurnoEspeciales?.[codigo];
+    const codigoNorm = this._normalizarTexto(codigo);
+    const texto = tipoConfig
+      ? `${this._normalizarTexto(tipoConfig.nombre)} ${this._normalizarTexto(tipoConfig.descripcion)}`
+      : "";
+
+    if (codigoNorm === "sc" || texto.includes("sincontrato")) return "reduce_tope";
+    if (codigoNorm === "a" || texto.includes("ausencia")) return "resta";
+    if (
+      ["i", "pr", "v"].includes(codigoNorm) ||
+      texto.includes("incapac") ||
+      texto.includes("vacacion") ||
+      (texto.includes("permiso") && texto.includes("remuner"))
+    ) return "suma";
+
+    return "ninguno";
+  }
+
+  /**
+   * Retorna { ajusteAcumulador, ajusteTope } para un código de concepto.
+   * - ajusteAcumulador: variación al acumulador de horas para extras (>0 suma, <0 resta)
+   * - ajusteTope:       variación al tope semanal (<0 para SC, 0 para el resto)
+   * @param {string}  codigo     Código del concepto
+   * @param {boolean} esDomingo  true si el día es domingo (SC no reduce tope en domingo)
+   */
+  _obtenerAjusteConceptoEspecial(codigo, esDomingo = false) {
+    const comportamiento = this._obtenerComportamientoConceptoEspecial(codigo);
+    const tipoConfig = this.configuracion?.tiposTurnoEspeciales?.[codigo];
+    const horas = tipoConfig ? (parseFloat(tipoConfig.horas) || 0) : 0;
+
+    switch (comportamiento) {
+      case "suma":        return { ajusteAcumulador: horas,   ajusteTope: 0 };
+      case "resta":       return { ajusteAcumulador: -horas,  ajusteTope: 0 };
+      case "reduce_tope": return { ajusteAcumulador: 0, ajusteTope: esDomingo ? 0 : -horas };
+      default:            return { ajusteAcumulador: 0,       ajusteTope: 0 };
+    }
   }
 
   _obtenerTurnoAsignadoParaDia(empleado, semanaNumero, indexDia, fechaDia) {
@@ -1252,16 +1306,17 @@ class SistemaTurnosMejorado {
         extraNocturnaFestiva: { porcentaje: 165 },
         tiposTurnoEspeciales: {
           I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad" },
-          SC: { nombre: "Sin contrato", horas: 0, descripcion: "Sin contrato" },
+          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato" },
         
           PR: {
             nombre: "Permiso remunerado",
             horas: 7,
             descripcion: "Permiso remunerado",
           },
-          A: { nombre: "Ausencia", horas: 0, descripcion: "Ausencia" },
+          A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia" },
           V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones" },
         },
+        versionConceptos: 2,
         codigoExportacion: {
           horasExtrasDiurnas: "045",
           horasExtrasNocturnas: "046",
@@ -2802,15 +2857,22 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       // --- PASO 2: CÁLCULO DEL TOPE DE HORAS SEMANALES ---
       const turnosSemana = [];
       let horasTrabajadasSemana = 0;
-      let horasEquivalentesSemana = 0;
+      let horasEquivalentesPositivasSemana = 0; // I, PR, V: suman al acumulador de tope
+      let horasEquivalentesNegativasSemana = 0; // A: restan del acumulador de tope
       const detalleHorasEquivalentesSemana = {};
 
-      // El tope semanal es SIEMPRE 42 horas
-      // No se reduce por festivos, domingos, incapacidades, vacaciones ni otros conceptos
+      // El tope base es 42 h. SC (Sin Contrato) lo reduce por cada día lunes–sábado.
+      // El domingo con SC NO reduce el tope.
       const horasMaximasSemanales = this.horasMaximasSemanalesNormal;
-
-      // El tope semanal se mantiene fijo sin ajustes por conceptos especiales
-      const horasMaximasAjustadas = horasMaximasSemanales;
+      let ajusteTope = 0;
+      semana.dias.forEach((dia, index) => {
+        if (index === 0) return; // domingo: SC no reduce tope
+        const turno = turnosDeLaSemanaCompleta[index];
+        if (!turno) return;
+        const ajuste = this._obtenerAjusteConceptoEspecial(turno, false);
+        ajusteTope += (ajuste.ajusteTope || 0);
+      });
+      const horasMaximasAjustadas = Math.max(0, horasMaximasSemanales + ajusteTope);
 
       // --- PASO 3: ACUMULAR HORAS DE TODA LA SEMANA (para cálculo correcto de extras) ---
       // CRÍTICO: Debemos acumular las horas en ORDEN cronológico de la semana completa
@@ -2847,7 +2909,11 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
           horasDeuda: 0,
         };
 
-        const horasEquivalentesDia = this._obtenerHorasEquivalentesParaTope(turno);
+        const ajusteConceptoEspecial = turno
+          ? this._obtenerAjusteConceptoEspecial(turno, index === 0)
+          : { ajusteAcumulador: 0, ajusteTope: 0 };
+        // horasEquivalentesDia: solo el valor positivo, para compatibilidad con el campo de display
+        const horasEquivalentesDia = Math.max(0, ajusteConceptoEspecial.ajusteAcumulador);
 
         if (turno && turnosConsideradosTrabajados.includes(turno)) {
           let horasTurno = 0;
@@ -2967,11 +3033,18 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
           };
         }
 
-        if (horasEquivalentesDia > 0) {
-          horasEquivalentesSemana += horasEquivalentesDia;
-          horasAcumuladasParaExtras += horasEquivalentesDia;
+        // Aplicar ajuste del concepto especial al acumulador de extras
+        if (ajusteConceptoEspecial.ajusteAcumulador > 0) {
+          horasEquivalentesPositivasSemana += ajusteConceptoEspecial.ajusteAcumulador;
+          horasAcumuladasParaExtras += ajusteConceptoEspecial.ajusteAcumulador;
           detalleHorasEquivalentesSemana[turno] =
-            (detalleHorasEquivalentesSemana[turno] || 0) + horasEquivalentesDia;
+            (detalleHorasEquivalentesSemana[turno] || 0) + ajusteConceptoEspecial.ajusteAcumulador;
+        } else if (ajusteConceptoEspecial.ajusteAcumulador < 0) {
+          horasEquivalentesNegativasSemana += Math.abs(ajusteConceptoEspecial.ajusteAcumulador);
+          horasAcumuladasParaExtras = Math.max(
+            0,
+            horasAcumuladasParaExtras + ajusteConceptoEspecial.ajusteAcumulador
+          );
         }
 
         turnosSemana.push({
@@ -2984,11 +3057,12 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       });
 
       const resumenSemana = this.calcularResumenSemana(turnosSemana);
-      const horasAcumuladasParaTope = horasTrabajadasSemana + horasEquivalentesSemana;
-      resumenSemana.horasDeuda = Math.max(
+      // Tope efectivo: trabajadas + positivas (I/PR/V) - negativas (A), nunca menor a 0
+      const horasAcumuladasParaTope = Math.max(
         0,
-        horasMaximasAjustadas - horasAcumuladasParaTope
+        horasTrabajadasSemana + horasEquivalentesPositivasSemana - horasEquivalentesNegativasSemana
       );
+      resumenSemana.horasDeuda = Math.max(0, horasMaximasAjustadas - horasAcumuladasParaTope);
       resultadosSemanas.push({
         numero: semana.numero,
         inicioSemana: semana.inicioSemana,
@@ -2996,7 +3070,9 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         turnos: turnosSemana,
         resumen: resumenSemana,
         horasMaximas: horasMaximasAjustadas,
-        horasEquivalentesTope: horasEquivalentesSemana,
+        horasEquivalentesTope: horasEquivalentesPositivasSemana,
+        horasEquivalentesNegativas: horasEquivalentesNegativasSemana,
+        ajusteTope,
         horasAcumuladasParaTope,
         detalleHorasEquivalentesTope: detalleHorasEquivalentesSemana,
       });
@@ -3092,6 +3168,8 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         if (!empleado.resultados) return;
         empleado.resultados.forEach((semana) => {
       const horasEquivalentesTope = semana.horasEquivalentesTope || 0;
+      const horasEquivalentesNegativas = semana.horasEquivalentesNegativas || 0;
+      const ajusteTopeSC = semana.ajusteTope || 0;
       const detalleEquivalentes = Object.entries(
         semana.detalleHorasEquivalentesTope || {}
       ).map(([codigo, horas]) => {
@@ -3105,6 +3183,13 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         ? ` (${detalleEquivalentes.join(" · ")})`
         : "";
 
+      const indicadorNegativo = horasEquivalentesNegativas > 0
+        ? ` <span class="tope-equivalentes tope-negativo" title="Ausencias descuentan del acumulado semanal">• Ausencias: −${horasEquivalentesNegativas.toFixed(1)}h</span>`
+        : "";
+      const indicadorTopeAjuste = ajusteTopeSC < 0
+        ? ` <span class="tope-equivalentes tope-sc" title="Sin Contrato reduce el tope semanal (solo lunes–sábado)">• SC: tope −${Math.abs(ajusteTopeSC).toFixed(1)}h</span>`
+        : "";
+
       const divSemana = document.createElement("div");
       divSemana.className = "resultado-semana";
       divSemana.innerHTML = `
@@ -3115,7 +3200,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         <p class="tope-horas">Tope de horas para esta semana: ${
           semana.horasMaximas
         } horas
-        <span class="tope-equivalentes" title="${tooltipEquivalentes.replace(/"/g, "&quot;")}">• Horas equivalentes (I/PR/V): ${horasEquivalentesTope.toFixed(1)}h${detalleVisible}</span>
+        <span class="tope-equivalentes" title="${tooltipEquivalentes.replace(/"/g, "&quot;")}">• Horas equivalentes (I/PR/V): ${horasEquivalentesTope.toFixed(1)}h${detalleVisible}</span>${indicadorNegativo}${indicadorTopeAjuste}
         </p>
         <div class="tabla-contenedor">
           <table class="tabla-turnos">
