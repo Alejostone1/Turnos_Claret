@@ -1125,14 +1125,14 @@ class SistemaTurnosMejorado {
           <div class="config-card-meta-row">
             <span class="config-meta-item">
               <span class="config-meta-label">Color</span>
-              <span class="config-meta-value">
+              <span class="config-meta-value" title="${metadata.color}">
                 <span class="config-color-dot" aria-hidden="true"></span>
                 ${metadata.color}
               </span>
             </span>
             <span class="config-meta-item">
               <span class="config-meta-label">Código interno</span>
-              <span class="config-meta-value">${metadata.codigoExportacion}</span>
+              <span class="config-meta-value" title="${metadata.codigoExportacion}">${metadata.codigoExportacion}</span>
             </span>
           </div>
         </div>
