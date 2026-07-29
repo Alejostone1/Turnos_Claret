@@ -547,8 +547,8 @@ class SistemaTurnosMejorado {
         extraDiurnaFestiva: { porcentaje: 115 },
         extraNocturnaFestiva: { porcentaje: 165 },
         tiposTurnoEspeciales: {
-          I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad" },
-          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato" },
+          I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad", color: "#42A5F5" },
+          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#90A4AE" },
           PR: {
             nombre: "Permiso remunerado",
             horas: 7,
@@ -567,7 +567,7 @@ class SistemaTurnosMejorado {
     if (!config.tiposTurnoEspeciales) {
       config.tiposTurnoEspeciales = {
         I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad", color: "#42A5F5" },
-        SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#BDBDBD" },
+        SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#90A4AE" },
         PR: {
           nombre: "Permiso remunerado",
           horas: 7,
@@ -957,6 +957,7 @@ class SistemaTurnosMejorado {
 
       const tarjeta = document.createElement("div");
       tarjeta.className = "config-card config-payroll-card";
+      tarjeta.style.setProperty("--concept-color", tipo.color || "#9e9e9e");
       tarjeta.innerHTML = `
         <div class="config-card-header">
           <div class="config-card-color-badge" style="background: ${tipo.color || '#9e9e9e'}" title="Color del concepto"></div>
@@ -1305,16 +1306,16 @@ class SistemaTurnosMejorado {
         extraDiurnaFestiva: { porcentaje: 115 },
         extraNocturnaFestiva: { porcentaje: 165 },
         tiposTurnoEspeciales: {
-          I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad" },
-          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato" },
-        
+          I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad", color: "#42A5F5" },
+          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#90A4AE" },
           PR: {
             nombre: "Permiso remunerado",
             horas: 7,
             descripcion: "Permiso remunerado",
+            color: "#66BB6A"
           },
-          A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia" },
-          V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones" },
+          A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia", color: "#EF5350" },
+          V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones", color: "#2E7D32" },
         },
         versionConceptos: 2,
         codigoExportacion: {
@@ -1435,6 +1436,7 @@ class SistemaTurnosMejorado {
         swatch.style.background = color;
         if (valueLabel) valueLabel.textContent = color;
         if (headerBadge) headerBadge.style.background = color;
+        card.style.setProperty("--concept-color", color);
       }
     });
   }
