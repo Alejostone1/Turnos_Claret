@@ -3355,7 +3355,7 @@ body {
 .config-cards-grid,
 #config-recargos-group,
 #config-extras-group {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 1rem;
     margin-top: 0.5rem;
 }
@@ -3368,12 +3368,13 @@ body {
     --concept-color: #334155;
     display: flex;
     flex-direction: column;
-    min-height: 320px;
     height: 100%;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-borde-lg);
+    box-shadow: var(--sombra-suave);
+    transition: transform var(--transicion-rapida), box-shadow var(--transicion-rapida), border-color var(--transicion-rapida);
+    background: var(--color-blanco);
+    overflow: hidden;
 }
 
 .config-concept-card::before {
@@ -3419,35 +3420,45 @@ body {
 }
 
 .config-card-meta-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.6rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
     margin-top: 0.75rem;
 }
 
 .config-meta-item {
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 0.5rem 0.6rem;
-    background: #f8fafc;
-    min-height: 54px;
+    flex: 1;
+    min-width: 100px;
+    max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-borde);
+    padding: 0.45rem 0.65rem;
+    background: var(--color-fondo-panel);
 }
 
 .config-meta-label {
     display: block;
-    color: #64748b;
-    font-size: 0.74rem;
-    font-weight: 600;
-    margin-bottom: 0.2rem;
+    color: var(--color-texto-claro);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
 }
 
 .config-meta-value {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 0.35rem;
-    color: #0f172a;
-    font-size: 0.84rem;
-    font-weight: 700;
+    color: var(--color-texto);
+    font-size: 0.8rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .config-color-dot {
@@ -3545,12 +3556,10 @@ body {
 }
 
 @media (max-width: 1200px) {
-    .config-panel-grid,
-    .config-cards-grid,
-    #config-recargos-group,
-    #config-extras-group {
+    .config-panel-grid {
         grid-template-columns: 1fr;
     }
+    /* Las cards de conceptos usan auto-fill; no forzar 1 columna aquí */
 }
 
 @media (max-width: 768px) {
@@ -3562,15 +3571,18 @@ body {
         padding: 1rem;
     }
 
-    .config-concept-card {
-        min-height: 0;
+    .config-cards-grid,
+    #config-recargos-group,
+    #config-extras-group {
+        grid-template-columns: 1fr;
     }
 
-    .config-card-meta-row,
     .config-concept-card .config-input-row,
     .config-concept-card .config-time-row {
         grid-template-columns: 1fr;
     }
+
+    /* Meta-row ya usa flex-wrap, no necesita override de grid */
 }
 
 /* ======================================================
