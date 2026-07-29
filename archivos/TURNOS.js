@@ -2593,9 +2593,24 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     }
 
     if (this.configuracion.tiposTurnoEspeciales[tipoTurno]) {
-      // Los conceptos especiales NO se clasifican como horas trabajadas.
-      // Solo algunos conceptos suman al tope semanal vía horas equivalentes.
-      resultado.horasEquivalentesTope = this._obtenerHorasEquivalentesParaTope(tipoTurno);
+      // Conceptos especiales con comportamiento "suma" (I/PR/V):
+      // se distribuyen como horas diurnas y, al superar tope, como extras diurnas.
+      const ajusteEspecial = this._obtenerAjusteConceptoEspecial(tipoTurno, fecha.getDay() === 0);
+      const horasEquivalentes = Math.max(0, ajusteEspecial.ajusteAcumulador || 0);
+      resultado.horasEquivalentesTope = horasEquivalentes;
+
+      if (horasEquivalentes > 0 && this._obtenerComportamientoConceptoEspecial(tipoTurno) === "suma") {
+        const limiteSemana = Number.isFinite(horasMaximas) ? horasMaximas : this.horasMaximasSemanalesNormal;
+        const horasDisponibles = Math.max(0, limiteSemana - horasAcumuladasParaExtras);
+        const horasOrdinarias = Math.min(horasEquivalentes, horasDisponibles);
+        const horasExtras = Math.max(0, horasEquivalentes - horasOrdinarias);
+
+        resultado.horasOrdinarias = horasOrdinarias;
+        resultado.extrasOrdinarias = horasExtras;
+        resultado.totalHoras = horasEquivalentes;
+        resultado.horasEfectivasParaExtras = horasEquivalentes;
+      }
+
       return resultado;
     }
 
@@ -2917,7 +2932,11 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         // horasEquivalentesDia: solo el valor positivo, para compatibilidad con el campo de display
         const horasEquivalentesDia = Math.max(0, ajusteConceptoEspecial.ajusteAcumulador);
 
-        if (turno && turnosConsideradosTrabajados.includes(turno)) {
+        const esConceptoEspecial = Boolean(
+          turno && this.configuracion.tiposTurnoEspeciales?.[turno]
+        );
+
+        if (turno && (turnosConsideradosTrabajados.includes(turno) || esConceptoEspecial)) {
           let horasTurno = 0;
           if (turno === 'M') {
             // Para turno manual, obtener las horas del turno guardado o del DOM
@@ -2935,7 +2954,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
                 horasTurno = this.calcularHorasTurnoConAlmuerzo(inicioManual, finManual, this.configuracionAlmuerzo);
               }
             }
-          } else {
+          } else if (!esConceptoEspecial) {
             // Turno no manual: calcular según configuración disponible
             const tipoCfg = this.configuracion.turnosDinamicos[turno] || this.tiposTurno[turno];
             if (tipoCfg) {
@@ -3014,7 +3033,9 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
             resultadoDelTurno.fin = this.tiposTurno[turno]?.fin || null;
           }
 
-          horasTrabajadasSemana += resultadoDelTurno.totalHoras;
+          if (!esConceptoEspecial) {
+            horasTrabajadasSemana += resultadoDelTurno.totalHoras;
+          }
         } else if (turno) {
           // Mostrar cualquier turno no productivo o concepto especial (C, SC, V, I, etc.)
           resultadoDelTurno = {
