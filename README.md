@@ -5,8 +5,8 @@ Documentación oficial para operación funcional, mantenimiento técnico y despl
 | Campo | Valor |
 |---|---|
 | **Versión del sistema** | 4.8 |
-| **Versión del documento** | 2.0 |
-| **Fecha** | Julio 2026 |
+| **Versión del documento** | 2.1 |
+| **Fecha** | Octubre 2026 |
 | **Autor** | Alejostone |
 | **Empresa / titular** | Alejostone |
 | **Repositorio** | `Alejostone1/Turnos_Claret` |
@@ -40,7 +40,8 @@ El sistema permite programar turnos por empleado y calcular automáticamente rec
 - Configuración de alimentación (sin, predefinida, personalizada).
 - Motor de cálculo minuto a minuto.
 - Clasificación automática de ordinarias/nocturnas/festivas/extras.
-- Tope semanal y distribución de extras.
+- Tope semanal de 42 h y distribución de extras.
+- Conceptos especiales (incapacidad, permiso, vacaciones, ausencia, sin contrato) con reglas propias frente al tope y la deuda.
 - Configuración de recargos y códigos de exportación.
 - Liquidación por concepto.
 - Exportación a Excel.
@@ -126,6 +127,7 @@ El sistema ya tiene fallback: si `window.electronAPI` no existe, exporta el Exce
 │   ├── package.json
 │   └── ...
 └── test/
+    ├── test_conceptos.js
     ├── test_runner.html
     ├── turnos_scenarios.js
     └── turnos_scenarios.json
@@ -210,6 +212,59 @@ Fórmula base:
 Valor hora ordinaria = salario mensual / 220
 ```
 
+### 10.1 Tope semanal y horas extras
+
+- El tope base es **42 horas por semana**.
+- Los días se recorren en orden (domingo → sábado) llevando un **acumulado de horas trabajadas**.
+- Cuando el acumulado supera el tope, las horas restantes se clasifican como **extras** (diurnas, nocturnas o festivas según el minuto en que ocurren).
+- **Solo las horas realmente trabajadas** (turnos dinámicos y turno manual) suman al acumulado.
+- Los festivos no trabajados **no reducen** el tope.
+- Domingo trabajado sin ningún día libre (`C`) en la semana: sus horas se liquidan como extras.
+
+### 10.2 Conceptos especiales
+
+Los conceptos especiales **no son horas trabajadas**: nunca generan horas ordinarias, extras ni recargos. Cada uno tiene un efecto distinto sobre el cálculo semanal:
+
+| Concepto | Código | ¿Suma para extras? | Efecto |
+|---|---|---|---|
+| Incapacidad | `I` | ❌ No | Solo **cubre la deuda** semanal con sus horas configuradas (7 h por defecto). |
+| Permiso remunerado | `PR` | ❌ No | Solo **cubre la deuda** semanal. |
+| Vacaciones | `V` | ❌ No | Solo **cubre la deuda** semanal. |
+| Ausencia | `A` | ➖ Resta | Descuenta sus horas del acumulado semanal. |
+| Sin contrato | `SC` | ❌ No | **Reduce el tope** semanal en sus horas, solo de lunes a sábado (el domingo no reduce). |
+| Libre | `C` | ❌ No | Día de descanso, sin efecto en horas. |
+
+> **Importante:** I, PR y V **no adelantan las extras**. Antes de octubre de 2026 (commit `38f3550`) estos conceptos sumaban al acumulado y hacían que horas trabajadas reales salieran como extras; esto quedó corregido.
+
+**Deuda semanal:**
+
+```text
+Deuda = máx(0, Tope − (Horas trabajadas + Horas I/PR/V − Horas A))
+```
+
+**Ejemplo** (tope 42 h, turnos de 8 h):
+
+| Semana | Trabajadas | I/PR/V | Extras | Deuda |
+|---|---:|---:|---:|---:|
+| Lun `I`, Mar–Sáb trabajados | 40 h | 7 h | 0 h | 0 h |
+| Lun `V`, Mar `PR`, Mié–Sáb trabajados | 32 h | 14 h | 0 h | 0 h |
+| Lun–Mar `I`, Mié–Vie trabajados | 24 h | 14 h | 0 h | 4 h |
+| Lun–Sáb trabajados | 48 h | 0 h | 6 h | 0 h |
+
+En la pantalla de resultados, la cabecera de cada semana muestra **"Horas justificadas (I/PR/V, solo deuda)"** para dejar claro que esas horas no cuentan para extras.
+
+El tipo de comportamiento también se reconoce por el nombre del concepto: un concepto personalizado cuyo nombre contenga *incapacidad*, *vacaciones* o *permiso remunerado* se trata igual que `I`/`PR`/`V`.
+
+### 10.3 Pruebas automáticas del motor
+
+Las reglas de los conceptos especiales y los escenarios de semana completa están cubiertos en `test/test_conceptos.js` (no requiere navegador):
+
+```bash
+node test/test_conceptos.js
+```
+
+Ejecute esta prueba después de cualquier cambio en `archivos/TURNOS.js`.
+
 ---
 
 ## 11. Preparación para Vercel (ya implementada)
@@ -258,6 +313,11 @@ No requiere configuración adicional porque `vercel.json` ya está incluido.
 
 - Verifique que `archivos/TURNOS.css` exista y sea accesible.
 
+### Cambié el código pero el navegador sigue calculando igual
+
+- `INICIO_TURNOS.html` carga `TURNOS.js` y `TURNOS.css` con un parámetro de versión (`?v=AAAAMMDDhhmm`). Actualícelo en cada cambio para forzar la recarga.
+- Como alternativa, recargue con **Ctrl + F5**.
+
 ### El manual no aparece
 
 - Verifique `archivos/instructivo.js`.
@@ -292,6 +352,7 @@ No requiere configuración adicional porque `vercel.json` ya está incluido.
 3. Validar festivos/domingos antes de liquidar.
 4. Estandarizar códigos de turno/concepto.
 5. Exportar y respaldar Excel al cerrar cálculo.
+6. Registrar incapacidades, permisos y vacaciones con su concepto (`I`, `PR`, `V`) y no como turno trabajado, para que no generen extras.
 
 ---
 
