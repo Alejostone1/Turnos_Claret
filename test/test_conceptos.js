@@ -110,5 +110,16 @@ assert("2 I + 24h trabajadas: deuda 4 (42 - 24 - 14)", sem.resumen.horasDeuda, 4
 sem = calcularSemana(["C", "D", "D", "D", "D", "D", "D"]);
 assert("Control 48h trabajadas: 6 extras", extras(sem.resumen), 6);
 
+// --- Exportación: los días con I/PR/V deben salir en el Informe Horas Extras ---
+calcularSemana(["C", "I", "V", "PR", "D", "D", "C"]);
+const informe = app._generarDatosInformeHorasExtras().data;
+const filaDe = (fechaTxt) => informe.find((f) => f[2] === fechaTxt);
+const fechaCO = (dia) => new Date(2026, 9, dia, 12).toLocaleDateString("es-CO");
+assert("Informe incluye fecha de I (19-oct)", filaDe(fechaCO(19))?.[3], "Incapacitado");
+assert("Informe incluye fecha de V (20-oct)", filaDe(fechaCO(20))?.[3], "Vacaciones");
+assert("Informe incluye fecha de PR (21-oct)", filaDe(fechaCO(21))?.[3], "Permiso remunerado");
+assert("Fila de I con 0 horas trabajadas", Number(filaDe(fechaCO(19))?.[6]), 0);
+assert("Informe no incluye dias libres C", filaDe(fechaCO(18)), undefined);
+
 console.log("\nResultado:", ok, "OK,", fail, "FAIL");
 process.exit(fail > 0 ? 1 : 0);

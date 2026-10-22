@@ -3985,8 +3985,10 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
                 (turno.horasNocturnasFestivas || 0) + (turno.extrasOrdinarias || 0) + (turno.extrasNocturnas || 0) +
                 (turno.extrasFestivas || 0) + (turno.extrasNocturnasFestivas || 0);
 
-                // Solo incluir filas con horas trabajadas
-                if (totalHorasTurno > 0) {
+                // Incluir filas con horas trabajadas y también los días con concepto especial
+                // (I, PR, V, A, SC...) para que sus fechas queden en el informe aunque no sumen horas.
+                const esTurnoEspecial = this.configuracion.tiposTurnoEspeciales[turno.turno];
+                if (totalHorasTurno > 0 || esTurnoEspecial) {
                     const formatHora = (hora) => {
                         if (!hora) return "";
                         const [h, m] = hora.split(":");
@@ -3997,7 +3999,6 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
                     let horarioSalida = formatHora(turno.fin);
 
                     // Si es un concepto especial (sin horario de entrada/salida), muestra el nombre del concepto.
-                    const esTurnoEspecial = this.configuracion.tiposTurnoEspeciales[turno.turno];
                     if (esTurnoEspecial && !turno.inicio && turno.turno !== 'M') {
                         horarioEntrada = this.tiposTurno[turno.turno]?.nombre || turno.turno;
                     }
