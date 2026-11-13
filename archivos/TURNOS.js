@@ -622,11 +622,13 @@ class SistemaTurnosMejorado {
     // FASE 1: Migración a Turnos Dinámicos
     if (!config.turnosDinamicos) {
       // Auto-inyección de los turnos base para mantener retrocompatibilidad
+      const c = SistemaTurnosMejorado.COLORES_TURNOS_BASE;
       config.turnosDinamicos = {
-        D: { id: 't_dia', nombre: "Día", codigo: "D", inicio: "07:00", fin: "19:00", color: "#fef3c7", descontarAlimentacion: true, activo: true, descripcion: "" },
-        N: { id: 't_noche', nombre: "Noche", codigo: "N", inicio: "19:00", fin: "07:00", color: "#dbeafe", descontarAlimentacion: true, activo: true, descripcion: "" },
-        "24T": { id: 't_24', nombre: "24 Horas", codigo: "24T", inicio: "07:00", fin: "07:00", color: "#e9d5ff", descontarAlimentacion: true, activo: true, descripcion: "" }
+        D: { id: 't_dia', nombre: "Día", codigo: "D", inicio: "07:00", fin: "19:00", color: c.D, descontarAlimentacion: true, activo: true, descripcion: "" },
+        N: { id: 't_noche', nombre: "Noche", codigo: "N", inicio: "19:00", fin: "07:00", color: c.N, descontarAlimentacion: true, activo: true, descripcion: "" },
+        "24T": { id: 't_24', nombre: "24 Horas", codigo: "24T", inicio: "07:00", fin: "07:00", color: c["24T"], descontarAlimentacion: true, activo: true, descripcion: "" }
       };
+      config.versionTurnos = 2;
     } else {
       // Garantizar propiedad descontarAlimentacion en configuraciones guardadas
       Object.values(config.turnosDinamicos).forEach(t => {
@@ -634,6 +636,19 @@ class SistemaTurnosMejorado {
           t.descontarAlimentacion = true;
         }
       });
+      // Migración: colores base (Día amarillo claro, Noche azul, 24 Horas violeta)
+      // solo si el turno conserva el color por defecto anterior
+      if (!config.versionTurnos || config.versionTurnos < 2) {
+        const anteriores = { D: "#fef3c7", N: "#dbeafe", "24T": "#e9d5ff" };
+        Object.entries(anteriores).forEach(([codigo, colorAnterior]) => {
+          const t = config.turnosDinamicos[codigo];
+          if (t && String(t.color || "").toLowerCase() === colorAnterior) {
+            t.color = SistemaTurnosMejorado.COLORES_TURNOS_BASE[codigo];
+          }
+        });
+        config.versionTurnos = 2;
+        huboLimpiezaInicial = true;
+      }
     }
 
     // Añadir códigos de exportación por defecto si faltan
@@ -908,130 +923,245 @@ class SistemaTurnosMejorado {
     this.configurarEventosConfiguracion();
   }
 
+  /**
+   * Lista de turnos configurados (tabla compacta). Crear y editar se hace en un modal.
+   */
   generarTarjetasTurnosDinamicos() {
     const container = document.getElementById("dynamic-shifts-list");
     if (!container) return;
     container.innerHTML = "";
-
     if (!this.configuracion.turnosDinamicos) return;
 
-    Object.values(this.configuracion.turnosDinamicos).forEach(turno => {
-      const tarjeta = document.createElement("div");
-      tarjeta.className = `shift-card ${turno.activo ? "" : "inactive-shift"}`;
-      tarjeta.style.borderTop = `4px solid ${turno.color}`;
-      tarjeta.innerHTML = `
-        <div class="shift-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="color" class="shift-color-picker" data-codigo="${turno.codigo}" value="${turno.color}" title="Cambiar color" style="width: 25px; height: 25px; padding: 0; border: none; border-radius: 4px; cursor: pointer;">
-                <input type="text" class="shift-title-input" data-codigo="${turno.codigo}" value="${turno.nombre}" style="font-weight: 600; font-size: 1.1rem; border: none; border-bottom: 1px solid #ccc; background: transparent; padding: 2px 5px; width: 100px;" placeholder="Nombre">
-                <input type="text" class="shift-code-input" data-codigo="${turno.codigo}" value="${turno.codigo}" style="font-size: 0.9rem; border: 1px solid #ccc; background: white; padding: 2px 5px; width: 45px; border-radius: 4px; text-align: center;" placeholder="Cód" title="Código UI (1-3 letras)" ${['D','N','24T'].includes(turno.codigo) ? 'readonly' : ''}>
-            </div>
-            <div style="display: flex; gap: 5px; align-items: center;">
-                ${SistemaTurnosMejorado.TURNOS_PROTEGIDOS.includes(turno.codigo)
-                  ? '<span class="shift-protegido" title="Turno base del sistema: no se puede eliminar">🔒 Base</span>'
-                  : `<button class="action-btn-small toggle-shift-btn" data-codigo="${turno.codigo}" title="${turno.activo ? 'Desactivar' : 'Activar'}" style="background:transparent; border:none; cursor:pointer; font-size: 1.2rem; opacity: ${turno.activo ? '1' : '0.5'};">
-                    ${turno.activo ? '✅' : '❌'}
-                </button>
-                <button class="action-btn-small delete-shift-btn" data-codigo="${turno.codigo}" title="Eliminar turno" aria-label="Eliminar turno ${turno.nombre}">
-                    🗑️
-                </button>`}
-            </div>
+    const confAlm = this._leerAlmuerzoFormulario();
+    Object.values(this.configuracion.turnosDinamicos).forEach((turno) => {
+      const protegido = SistemaTurnosMejorado.TURNOS_PROTEGIDOS.includes(turno.codigo);
+      const horas = this._horasEfectivasTurno(turno, confAlm);
+      const estilos = this.calcularEstilosDeColor(turno.color);
+      const fila = document.createElement("div");
+      fila.className = `turno-fila${turno.activo ? "" : " turno-inactivo"}`;
+      fila.innerHTML = `
+        <span class="turno-fila-codigo" style="background:${turno.color}; color:${estilos.text}; border-color:${estilos.border}">${this._escaparHTML(turno.codigo)}</span>
+        <div class="turno-fila-info">
+          <span class="turno-fila-nombre">${this._escaparHTML(turno.nombre)}${protegido ? ' <span class="turno-fila-etiqueta">Base</span>' : ""}${turno.activo ? "" : ' <span class="turno-fila-etiqueta etiqueta-inactivo">Inactivo</span>'}</span>
+          <span class="turno-fila-detalle">${this.formatearHoraAMPM(turno.inicio)} – ${this.formatearHoraAMPM(turno.fin)} · ${this._formatearHoras(horas)} h efectivas${turno.descontarAlimentacion !== false ? "" : " · sin descuento de alimentación"}</span>
         </div>
-        <div class="shift-times">
-            <div class="time-input-group">
-                <label class="time-label">Inicio</label>
-                <input type="time" class="time-input shift-start-input" data-codigo="${turno.codigo}" value="${turno.inicio}">
-            </div>
-            <div class="time-separator">-</div>
-            <div class="time-input-group">
-                <label class="time-label">Fin</label>
-                <input type="time" class="time-input shift-end-input" data-codigo="${turno.codigo}" value="${turno.fin}">
-            </div>
-        </div>
-        <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
-            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; color: #475569; font-weight: 500;">
-                <input type="checkbox" class="shift-meal-input" data-codigo="${turno.codigo}" ${turno.descontarAlimentacion !== false ? 'checked' : ''}>
-                ✔ Descontar alimentación
-            </label>
+        <div class="turno-fila-acciones">
+          <button type="button" class="btn-accion btn-editar-turno" data-codigo="${this._escaparHTML(turno.codigo)}">Editar</button>
+          ${protegido ? "" : `
+          <button type="button" class="btn-accion toggle-shift-btn" data-codigo="${this._escaparHTML(turno.codigo)}">${turno.activo ? "Desactivar" : "Activar"}</button>
+          <button type="button" class="btn-accion btn-accion-peligro delete-shift-btn" data-codigo="${this._escaparHTML(turno.codigo)}" aria-label="Eliminar turno ${this._escaparHTML(turno.nombre)}">Eliminar</button>`}
         </div>
       `;
-      container.appendChild(tarjeta);
+      container.appendChild(fila);
     });
 
-    container.querySelectorAll('input').forEach(input => {
-      input.addEventListener('change', (e) => this.actualizarTurnoDinamico(e.target));
+    container.querySelectorAll(".btn-editar-turno").forEach((btn) => {
+      btn.addEventListener("click", (e) => this.abrirModalTurno(e.currentTarget.dataset.codigo));
     });
-    container.querySelectorAll('.toggle-shift-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => this.toggleTurnoDinamico(e.currentTarget.dataset.codigo));
+    container.querySelectorAll(".toggle-shift-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => this.toggleTurnoDinamico(e.currentTarget.dataset.codigo));
     });
-    container.querySelectorAll('.delete-shift-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => this.eliminarTurnoDinamico(e.currentTarget.dataset.codigo));
+    container.querySelectorAll(".delete-shift-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => this.eliminarTurnoDinamico(e.currentTarget.dataset.codigo));
     });
   }
 
-  agregarNuevoTurnoDinamico() {
-    const id = 't_' + Date.now();
-    let codigoPropuesto = "T1";
-    let contador = 1;
-    while(this.configuracion.turnosDinamicos[codigoPropuesto] || this.configuracion.tiposTurnoEspeciales[codigoPropuesto] || ['C', 'M'].includes(codigoPropuesto)) {
-        contador++;
-        codigoPropuesto = "T" + contador;
-    }
+  _horasEfectivasTurno(turno, confAlm) {
+    if (!turno.inicio || !turno.fin) return 0;
+    const es24h = turno.inicio === turno.fin;
+    return turno.descontarAlimentacion !== false
+      ? this.calcularHorasTurnoConAlmuerzo(turno.inicio, turno.fin, confAlm, es24h)
+      : this.calcularHorasDesdeTiempos(turno.inicio, turno.fin, false, 0);
+  }
 
-    this.configuracion.turnosDinamicos[codigoPropuesto] = {
-        id: id,
-        nombre: "Nuevo Turno",
-        codigo: codigoPropuesto,
-        inicio: "08:00",
-        fin: "16:00",
-        color: "#9e9e9e",
-        descontarAlimentacion: true,
-        activo: true,
-        descripcion: ""
+  /**
+   * Alimentación seleccionada hoy en el formulario (sin usar la del último cálculo).
+   */
+  _leerAlmuerzoFormulario() {
+    const guardada = this.configuracionAlmuerzo;
+    if (typeof document === "undefined" || !document.querySelector('input[name="tipo-almuerzo"]')) {
+      return guardada || { tipo: "predefinido", tiempoEnHoras: 0.5 };
+    }
+    this.configuracionAlmuerzo = null;
+    const leida = this.obtenerConfiguracionAlmuerzo();
+    this.configuracionAlmuerzo = guardada;
+    return leida;
+  }
+
+  _formatearHoras(valor) {
+    return (Math.round((valor || 0) * 100) / 100).toLocaleString("es-CO", { maximumFractionDigits: 2 });
+  }
+
+  /**
+   * "Añadir nuevo turno": abre el modal vacío; el turno solo se crea al guardar.
+   */
+  agregarNuevoTurnoDinamico() {
+    this.abrirModalTurno(null);
+  }
+
+  _proponerCodigoTurno() {
+    let contador = 1;
+    let codigo = "T1";
+    while (!this._codigoTurnoDisponible(codigo)) {
+      contador++;
+      codigo = "T" + contador;
+    }
+    return codigo;
+  }
+
+  _codigoTurnoDisponible(codigo, codigoActual = null) {
+    if (codigo === codigoActual) return true;
+    return !(
+      this.configuracion.turnosDinamicos[codigo] ||
+      this.configuracion.tiposTurnoEspeciales[codigo] ||
+      ["C", "M"].includes(codigo)
+    );
+  }
+
+  /**
+   * Abre el modal para crear (codigo = null) o editar un turno.
+   */
+  abrirModalTurno(codigo) {
+    const modal = document.getElementById("modal-turno");
+    if (!modal) return;
+    const turno = codigo ? this.configuracion.turnosDinamicos[codigo] : null;
+    const protegido = Boolean(turno && SistemaTurnosMejorado.TURNOS_PROTEGIDOS.includes(codigo));
+    const datos = turno || {
+      nombre: "",
+      codigo: this._proponerCodigoTurno(),
+      inicio: "08:00",
+      fin: "16:00",
+      color: "#14B8A6",
+      descontarAlimentacion: true,
     };
 
+    const campo = (id) => document.getElementById(id);
+    campo("titulo-modal-turno").textContent = turno ? `Editar turno ${turno.nombre}` : "Nuevo turno";
+    campo("turno-nombre").value = datos.nombre;
+    campo("turno-codigo").value = datos.codigo;
+    campo("turno-codigo").readOnly = protegido;
+    campo("turno-codigo-ayuda").textContent = protegido
+      ? "Código de turno base: no se puede cambiar."
+      : "De 1 a 4 letras o números. No puede repetirse.";
+    campo("turno-inicio").value = datos.inicio;
+    campo("turno-fin").value = datos.fin;
+    campo("turno-color").value = datos.color;
+    campo("turno-alimentacion").checked = datos.descontarAlimentacion !== false;
+    campo("error-modal-turno").textContent = "";
+
+    const actualizarVista = () => this._actualizarVistaPreviaTurno();
+    ["turno-nombre", "turno-codigo", "turno-inicio", "turno-fin", "turno-color", "turno-alimentacion"].forEach((id) => {
+      campo(id).oninput = actualizarVista;
+      campo(id).onchange = actualizarVista;
+    });
+    modal.querySelectorAll(".muestra-color").forEach((btn) => {
+      btn.onclick = () => { campo("turno-color").value = btn.dataset.color; actualizarVista(); };
+    });
+    actualizarVista();
+
+    const cerrar = () => { modal.style.display = "none"; document.removeEventListener("keydown", onKey); };
+    const guardar = () => {
+      const resultado = this.guardarTurnoDinamico({
+        nombre: campo("turno-nombre").value,
+        codigo: campo("turno-codigo").value,
+        inicio: campo("turno-inicio").value,
+        fin: campo("turno-fin").value,
+        color: campo("turno-color").value,
+        descontarAlimentacion: campo("turno-alimentacion").checked,
+      }, codigo);
+      if (!resultado.ok) {
+        campo("error-modal-turno").textContent = resultado.error;
+        return;
+      }
+      cerrar();
+      this.mostrarNotificacion(turno ? "Turno actualizado" : `Turno ${resultado.codigo} creado`, "success");
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") cerrar();
+      if (e.key === "Enter" && e.target.tagName === "INPUT" && e.target.type !== "checkbox") guardar();
+    };
+    campo("btn-guardar-turno").onclick = guardar;
+    campo("btn-cancelar-turno").onclick = cerrar;
+    campo("btn-cerrar-modal-turno").onclick = cerrar;
+    document.addEventListener("keydown", onKey);
+
+    modal.style.display = "flex";
+    setTimeout(() => campo("turno-nombre").focus(), 50);
+  }
+
+  _actualizarVistaPreviaTurno() {
+    const campo = (id) => document.getElementById(id);
+    const vista = campo("turno-vista-previa");
+    if (!vista) return;
+    const turno = {
+      inicio: campo("turno-inicio").value,
+      fin: campo("turno-fin").value,
+      descontarAlimentacion: campo("turno-alimentacion").checked,
+    };
+    const color = campo("turno-color").value || "#9e9e9e";
+    const estilos = this.calcularEstilosDeColor(color);
+    const codigo = (campo("turno-codigo").value || "?").toUpperCase();
+    const nombre = campo("turno-nombre").value || "Nombre del turno";
+    const horas = turno.inicio && turno.fin ? this._horasEfectivasTurno(turno, this._leerAlmuerzoFormulario()) : 0;
+    vista.innerHTML = `
+      <span class="turno-fila-codigo" style="background:${color}; color:${estilos.text}; border-color:${estilos.border}">${this._escaparHTML(codigo)}</span>
+      <div class="turno-fila-info">
+        <span class="turno-fila-nombre">${this._escaparHTML(nombre)}</span>
+        <span class="turno-fila-detalle">${turno.inicio && turno.fin
+          ? `${this.formatearHoraAMPM(turno.inicio)} – ${this.formatearHoraAMPM(turno.fin)} · ${this._formatearHoras(horas)} h efectivas`
+          : "Defina inicio y fin"}</span>
+      </div>`;
+    document.querySelectorAll("#modal-turno .muestra-color").forEach((btn) => {
+      btn.classList.toggle("activa", btn.dataset.color.toLowerCase() === color.toLowerCase());
+    });
+  }
+
+  /**
+   * Crea o actualiza un turno dinámico con validación. No depende del DOM.
+   * @param {object} datos  { nombre, codigo, inicio, fin, color, descontarAlimentacion }
+   * @param {string|null} codigoOriginal  null para crear
+   * @returns {{ok: boolean, error?: string, codigo?: string}}
+   */
+  guardarTurnoDinamico(datos, codigoOriginal = null) {
+    const nombre = String(datos.nombre || "").trim();
+    const codigo = String(datos.codigo || "").trim().toUpperCase();
+    const existente = codigoOriginal ? this.configuracion.turnosDinamicos[codigoOriginal] : null;
+    if (codigoOriginal && !existente) return { ok: false, error: "El turno ya no existe." };
+    const protegido = Boolean(existente && SistemaTurnosMejorado.TURNOS_PROTEGIDOS.includes(codigoOriginal));
+
+    if (!nombre) return { ok: false, error: "Escriba el nombre del turno." };
+    if (!/^[A-Z0-9]{1,4}$/.test(codigo)) return { ok: false, error: "El código debe tener de 1 a 4 letras o números, sin espacios." };
+    if (protegido && codigo !== codigoOriginal) return { ok: false, error: "El código de un turno base no se puede cambiar." };
+    if (!this._codigoTurnoDisponible(codigo, codigoOriginal)) return { ok: false, error: `El código ${codigo} ya está en uso.` };
+    if (!/^\d{2}:\d{2}$/.test(datos.inicio || "") || !/^\d{2}:\d{2}$/.test(datos.fin || "")) {
+      return { ok: false, error: "Defina la hora de inicio y de fin." };
+    }
+    const color = /^#[0-9a-fA-F]{6}$/.test(datos.color || "") ? datos.color : "#9e9e9e";
+
+    // Conservar lo que está en pantalla antes de cambiar la configuración
     this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
+
+    const turno = existente || { id: "t_" + Date.now(), activo: true, descripcion: "" };
+    Object.assign(turno, {
+      nombre,
+      codigo,
+      inicio: datos.inicio,
+      fin: datos.fin,
+      color,
+      descontarAlimentacion: datos.descontarAlimentacion !== false,
+    });
+
+    if (codigoOriginal && codigo !== codigoOriginal) {
+      delete this.configuracion.turnosDinamicos[codigoOriginal];
+      this._reemplazarReferenciasTurno(codigoOriginal, codigo);
+    }
+    this.configuracion.turnosDinamicos[codigo] = turno;
+
     this.guardarConfiguracion();
     this.actualizarTiposTurno();
     this.generarTarjetasTurnosDinamicos();
     this._refrescarProgramacion();
-  }
-
-  actualizarTurnoDinamico(element) {
-    const oldCodigo = element.dataset.codigo;
-    const turno = this.configuracion.turnosDinamicos[oldCodigo];
-    if (!turno) return;
-    // Conservar lo que está en pantalla antes de cambiar la configuración del turno
-    this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
-
-    if (element.classList.contains('shift-title-input')) turno.nombre = element.value;
-    if (element.classList.contains('shift-color-picker')) turno.color = element.value;
-    if (element.classList.contains('shift-start-input')) turno.inicio = element.value;
-    if (element.classList.contains('shift-end-input')) turno.fin = element.value;
-    if (element.classList.contains('shift-meal-input')) turno.descontarAlimentacion = element.checked;
-    
-    if (element.classList.contains('shift-code-input')) {
-        let newCodigo = element.value.trim().toUpperCase();
-        if (newCodigo === "") newCodigo = oldCodigo;
-        if (newCodigo !== oldCodigo) {
-            if (this.configuracion.turnosDinamicos[newCodigo] || this.configuracion.tiposTurnoEspeciales[newCodigo] || ['C', 'M'].includes(newCodigo)) {
-                alert("El código de turno '" + newCodigo + "' ya está en uso. Por favor usa uno diferente.");
-                element.value = oldCodigo;
-                return;
-            }
-            turno.codigo = newCodigo;
-            this.configuracion.turnosDinamicos[newCodigo] = turno;
-            delete this.configuracion.turnosDinamicos[oldCodigo];
-            this._reemplazarReferenciasTurno(oldCodigo, newCodigo);
-        }
-    }
-
-    this.guardarConfiguracion();
-    this.actualizarTiposTurno();
-    if (element.classList.contains('shift-code-input')) {
-        this.generarTarjetasTurnosDinamicos();
-    }
-    this._refrescarProgramacion();
+    return { ok: true, codigo };
   }
 
   toggleTurnoDinamico(codigo) {
@@ -1768,6 +1898,11 @@ class SistemaTurnosMejorado {
           this.manejarTipoAlmuerzo(e.target.value)
         );
       });
+
+    // Las horas efectivas de la lista de turnos siguen la alimentación elegida
+    document
+      .querySelectorAll('input[name="tipo-almuerzo"], input[name="tiempo-almuerzo"], #inicio-almuerzo, #fin-almuerzo')
+      .forEach((el) => el.addEventListener("change", () => this.generarTarjetasTurnosDinamicos()));
 
     // Formatear salario mientras se escribe
     document.getElementById('salario-mensual').addEventListener('input', (e) => {
@@ -2597,8 +2732,8 @@ class SistemaTurnosMejorado {
         acciones.innerHTML = `
             <span class="estado-guardado" id="estado-guardado-${empleado.documento}"></span>
             <div class="empleado-acciones-botones">
-                <button type="button" class="btn-pre-guardar-individual">💾 Pre-guardar</button>
-                <button type="button" class="btn-ver-resultados-individual">📊 Ver resultados de ${this._escaparHTML(empleado.nombre)}</button>
+                <button type="button" class="btn-pre-guardar-individual">Pre-guardar</button>
+                <button type="button" class="btn-ver-resultados-individual">Ver resultados de ${this._escaparHTML(empleado.nombre)}</button>
             </div>
         `;
         acciones.querySelector(".btn-pre-guardar-individual")
@@ -2674,7 +2809,11 @@ class SistemaTurnosMejorado {
     const contenedorLista = document.getElementById("lista-empleados");
     if (!contenedorLista) return;
 
-    contenedorLista.innerHTML = "<h3>Lista de Empleados</h3>";
+    contenedorLista.innerHTML = this.empleados.size
+      ? `<div class="emp-fila emp-fila-encabezado" aria-hidden="true">
+           <span>Empleado</span><span>Período</span><span>Estado</span><span class="emp-col-acciones">Acciones</span>
+         </div>`
+      : `<p class="emp-vacio">Aún no hay empleados. Use “Agregar empleado”.</p>`;
 
     this.empleados.forEach(empleado => {
       const itemEmpleado = document.createElement("div");
@@ -2700,21 +2839,24 @@ class SistemaTurnosMejorado {
         itemEmpleado.classList.add(tieneTurnos ? "empleado-con-turnos" : "empleado-sin-turnos");
       }
 
-      const estado = empleado.cambiosSinGuardar
-        ? "✏️ Cambios sin guardar"
-        : (preGuardado ? "💾 Pre-guardado" : (tieneTurnos ? "✅ Turnos Asignados" : "⏳ Sin Turnos"));
+      const [estado, claseEstado] = empleado.cambiosSinGuardar
+        ? ["Cambios sin guardar", "estado-pendiente"]
+        : (preGuardado ? ["Guardado", "estado-ok"] : (tieneTurnos ? ["Turnos asignados", "estado-info"] : ["Sin turnos", "estado-neutro"]));
+      const formato = (f) => new Date(`${f}T00:00:00`).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
 
+      itemEmpleado.classList.add("emp-fila");
       itemEmpleado.innerHTML = `
-        <span class="empleado-nombre">${this._escaparHTML(empleado.nombre)}</span>
-        <span class="empleado-documento">(${empleado.documento})</span>
-        <div class="empleado-fechas">
-            <span class="fecha">Inicio: ${empleado.fechaInicio}</span>
-            <span class="fecha">Fin: ${empleado.fechaFin}</span>
+        <div class="emp-col-nombre">
+          <span class="empleado-nombre">${this._escaparHTML(empleado.nombre)}</span>
+          <span class="empleado-documento">Doc. ${empleado.documento}</span>
         </div>
-        <span class="estado-turnos">${estado}</span>
-        <button class="btn-ver-resultados-lista" data-documento="${empleado.documento}" title="Ver resultados de este empleado">📊</button>
-        <button class="btn-editar-empleado" data-documento="${empleado.documento}" title="Editar empleado">✏️</button>
-        <button class="btn-eliminar-empleado" data-documento="${empleado.documento}" title="Eliminar empleado">🗑️</button>
+        <span class="empleado-fechas">${formato(empleado.fechaInicio)} – ${formato(empleado.fechaFin)}</span>
+        <span class="estado-turnos"><span class="estado-pill ${claseEstado}">${estado}</span></span>
+        <div class="emp-col-acciones">
+          <button class="btn-accion btn-ver-resultados-lista" data-documento="${empleado.documento}">Resultados</button>
+          <button class="btn-accion btn-editar-empleado" data-documento="${empleado.documento}">Editar</button>
+          <button class="btn-accion btn-accion-peligro btn-eliminar-empleado" data-documento="${empleado.documento}">Eliminar</button>
+        </div>
       `;
 
       contenedorLista.appendChild(itemEmpleado);
@@ -4521,6 +4663,11 @@ class SistemaTurnosMejorado {
                 }
 
                 const tipoTurnoNombre = this.tiposTurno[turno.turno]?.nombre || turno.turno;
+                // Incapacidad/vacaciones: se informan sus horas reconocidas (p. ej. 7,33) solo si
+                // ese día sumó al tope (semana con turno trabajado, no domingo ni festivo).
+                // Es informativo: no se suma en ninguna columna de recargos ni extras.
+                const horasReconocidas = (turno.horasIncapacidad || 0) + (turno.horasVacaciones || 0);
+                const horasInforme = totalHorasTurno > 0 ? totalHorasTurno : horasReconocidas;
 
                 rellenos.push({ r: data.length + 2, c: 3, color: this._colorTurno(turno.turno) });
                 data.push([
@@ -4530,7 +4677,7 @@ class SistemaTurnosMejorado {
                     tipoTurnoNombre,
                     horarioEntrada,
                     horarioSalida,
-                    this._formatearNumeroExcel(totalHorasTurno),
+                    this._formatearNumeroExcel(horasInforme),
                     this._formatearNumeroExcel(turno.extrasOrdinarias),
                     this._formatearNumeroExcel(turno.extrasNocturnas),
                     this._formatearNumeroExcel(turno.horasFestivas),
@@ -4572,6 +4719,13 @@ SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS = Object.freeze({
   PR: "#9CCC65", // Permiso remunerado: verde claro
   A: "#E53935",  // Ausencia: rojo
   V: "#2E7D32",  // Vacaciones: verde
+});
+
+// Colores por defecto de los turnos base (editables por el usuario)
+SistemaTurnosMejorado.COLORES_TURNOS_BASE = Object.freeze({
+  D: "#FDE68A",   // Día: amarillo claro
+  N: "#3B82F6",   // Noche: azul
+  "24T": "#8B5CF6", // 24 Horas: violeta
 });
 
 // Turnos base que no se pueden eliminar ni desactivar

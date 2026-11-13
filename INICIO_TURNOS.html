@@ -16,245 +16,157 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="stylesheet" href="archivos/TURNOS.css?v=202611131200">
+    <link rel="stylesheet" href="archivos/TURNOS.css?v=202611131600">
     <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 </head>
 <body>
     <div class="contenedor-principal">
-        <header class="encabezado">
-            <h1>Sistema de Control de Turnos</h1>
-            <p class="subtitulo">Gestión de Horarios y Cálculo de Horas Extras </p>
+        <header class="encabezado barra-app">
+            <div class="barra-app-marca">
+                <span class="barra-app-logo" aria-hidden="true">CT</span>
+                <div>
+                    <h1>Control de Turnos</h1>
+                    <p class="subtitulo">Programación, horas extras y liquidación</p>
+                </div>
+            </div>
+            <span class="barra-app-version">Versión 5.0</span>
         </header>
 
     <main class="contenido-principal">
             <!-- Sección de Configuración -->
-            <section id="seccion-configuracion">
-                <div class="main-config-container">
-                    <!-- Header de la configuración -->
-                    <div class="main-config-header">
-                        <div class="config-header-content">
-                            <h1 class="main-config-title">
-                                <span class="main-config-icon">👤</span>
-                                Configuración Inicial
-                            </h1>
-                            <p class="main-config-subtitle">
-                                Establece los datos del empleado, período de trabajo y horarios de turnos
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Aviso de programación guardada en este navegador -->
-                    <div id="aviso-programacion-guardada" class="aviso-programacion" style="display: none;" role="status">
-                        <div class="aviso-texto">
-                            <strong>Hay una programación guardada</strong>
-                            <span class="aviso-detalle"></span>
-                        </div>
-                        <div class="aviso-acciones">
-                            <button type="button" class="action-btn secondary-btn btn-descartar-programacion">Descartar</button>
-                            <button type="button" class="action-btn primary-btn btn-continuar-programacion">Continuar programación</button>
-                        </div>
-                    </div>
-                    <!-- Contenido principal -->
-                    <div class="main-config-body">
-                        <!-- Fila de Datos Personales -->
-                        <div class="main-config-row">
-                            <div class="main-config-section" style="grid-column: 1 / -1;">
-                                <div class="section-header">
-                                    <h2 class="section-title">
-                                        <span class="section-icon">👤</span>
-                                        Datos Iniciales
-                                    </h2>
-
-                                </div>
-                                <div class="personal-data-card">
-                                    <div class="config-input-group">
-                                        <label for="numero-empleados" class="config-label">
-                                            <span class="label-icon">👥</span>
-                                            Número de Empleados
-                                        </label>
-                                        <input type="number" id="numero-empleados" class="config-input" placeholder="10" value="1" min="1" max="50">
-                                    </div>
-                                    <div class="config-input-group">
-                                        <label for="salario-mensual" class="config-label">
-                                            <span class="label-icon">💰</span>
-                                            Salario Mensual (Base)
-                                        </label>
-                                        <div class="percentage-input-container">
-                                            <input type="text" inputmode="numeric" pattern="[0-9]*" id="salario-mensual" class="config-input" placeholder="1,750,905" value="1750905" style="padding-left: 2.5rem;">
-                                            <span class="percentage-symbol" style="left: 1rem; right: auto;">$</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Fila de Período de Trabajo -->
-                        <div class="main-config-row">
-                            <div class="main-config-section" style="grid-column: 1 / -1;">
-                                <div class="section-header">
-                                    <h2 class="section-title">
-                                        <span class="section-icon">📅</span>
-                                        Período de Trabajo
-                                    </h2>
-                                </div>
-                                <div class="period-card">
-                                    <div class="date-inputs">
-                                        <div class="config-input-group">
-                                            <label for="fecha-inicio" class="config-label">
-                                                <span class="label-icon">📅</span>
-                                                Fecha de Inicio
-                                            </label>
-                                            <div class="date-input-container">
-                                                <input type="date" id="fecha-inicio" class="config-input">
-                                                <div class="day-display" id="dia-semana-inicio"></div>
-                                            </div>
-                                        </div>
-                                        <div class="config-input-group">
-                                            <label for="fecha-fin" class="config-label">
-                                                <span class="label-icon">📅</span>
-                                                Fecha de Fin
-                                            </label>
-                                            <div class="date-input-container">
-                                                <input type="date" id="fecha-fin" class="config-input">
-                                                <div class="day-display" id="dia-semana-fin"></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Segunda fila: Horarios de Turnos y Configuración de Almuerzo -->
-                        <div class="main-config-row">
-                            <!-- Sección de Horarios de Turnos -->
-                            <div class="main-config-section">
-                                <div class="section-header">
-                                    <h2 class="section-title">
-                                        <span class="section-icon">⏰</span>
-                                        Configuración de Turnos
-                                    </h2>
-                                </div>
-                                <div id="dynamic-shifts-list" class="shifts-grid">
-                                    <!-- Los turnos dinámicos se renderizarán aquí mediante JavaScript -->
-                                </div>
-                                <button id="btn-add-shift" class="action-btn primary-btn" style="margin-top: 15px; width: 100%;">
-                                    <span class="btn-icon">➕</span> Añadir Nuevo Turno
-                                </button>
-                            </div>
-
-                            <!-- Sección de Almuerzo -->
-                            <div class="main-config-section">
-                                <div class="section-header">
-                                    <h2 class="section-title">
-                                        <span class="section-icon">🍽️</span>
-                                        Configuración de Almuerzo
-                                    </h2>
-                                </div>
-
-                                <div class="lunch-card">
-                                    <div class="lunch-type-selector">
-                                        <div class="radio-option">
-                                            <input type="radio" id="tipo-sin-almuerzo" name="tipo-almuerzo" value="sin-almuerzo">
-                                            <label for="tipo-sin-almuerzo" class="radio-label">
-                                                <span class="radio-icon">🚫</span>
-                                                Sin Almuerzo
-                                            </label>
-                                        </div>
-                                        <div class="radio-option">
-                                            <input type="radio" id="tipo-predefinido" name="tipo-almuerzo" value="predefinido" checked>
-                                            <label for="tipo-predefinido" class="radio-label">
-                                                <span class="radio-icon">⏱️</span>
-                                                Tiempo Predefinido
-                                            </label>
-                                        </div>
-                                        <div class="radio-option">
-                                            <input type="radio" id="tipo-personalizado" name="tipo-almuerzo" value="personalizado">
-                                            <label for="tipo-personalizado" class="radio-label">
-                                                <span class="radio-icon">🕐</span>
-                                                Horario Personalizado
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                    <!-- Opciones predefinidas -->
-                                    <div id="opciones-predefinidas" class="lunch-options">
-                                        <div class="predefined-options">
-                                            <div class="radio-option">
-                                                <input type="radio" id="almuerzo-30min" name="tiempo-almuerzo" value="0.5" checked>
-                                                <label for="almuerzo-30min" class="radio-label">30 minutos</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="almuerzo-1hora" name="tiempo-almuerzo" value="1">
-                                                <label for="almuerzo-1hora" class="radio-label">1 hora</label>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Horario personalizado -->
-                                    <div id="horario-personalizado" class="lunch-options" style="display: none;">
-                                        <div class="custom-time-inputs">
-                                            <div class="time-input-group">
-                                                <label for="inicio-almuerzo" class="time-label">Inicio</label>
-                                                <input type="time" id="inicio-almuerzo" class="time-input" value="12:00">
-                                            </div>
-                                            <div class="time-separator">-</div>
-                                            <div class="time-input-group">
-                                                <label for="fin-almuerzo" class="time-label">Fin</label>
-                                                <input type="time" id="fin-almuerzo" class="time-input" value="13:00">
-                                    </div>
-                                </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                            </div>
-
-                    <!-- Footer con acciones -->
-                    <div class="main-config-footer">
-                        <div class="footer-actions">
-                            <button id="btn-manual-usuario" class="action-btn secondary-btn">
-                                <span class="btn-icon">❔</span>
-                                Manual de Usuario
-                            </button>
-                            <button id="btn-sistema-config" class="action-btn secondary-btn">
-                                <span class="btn-icon">⚙️</span>
-                                Configuración
-                            </button>
-                            <button id="btn-limpiar-todo" class="action-btn secondary-btn">
-                                <span class="btn-icon">🗑️</span>
-                                Limpiar Todo
-                            </button>
-                            <button id="btn-generar-periodo" class="action-btn primary-btn">
-                                <span class="btn-icon">➡️</span>
-                                Siguiente
-                            </button>
-                        </div>
+            <section id="seccion-configuracion" class="pc">
+                <div class="pc-titulo">
+                    <div>
+                        <h2>Configuración inicial</h2>
+                        <p>Defina el período, los turnos y la alimentación antes de programar a los empleados.</p>
                     </div>
                 </div>
-            </section>
 
+                <!-- Aviso de programación guardada en este navegador -->
+                <div id="aviso-programacion-guardada" class="aviso-programacion" style="display: none;" role="status">
+                    <div class="aviso-texto">
+                        <strong>Hay una programación guardada</strong>
+                        <span class="aviso-detalle"></span>
+                    </div>
+                    <div class="aviso-acciones">
+                        <button type="button" class="pc-boton pc-boton-secundario btn-descartar-programacion">Descartar</button>
+                        <button type="button" class="pc-boton pc-boton-primario btn-continuar-programacion">Continuar programación</button>
+                    </div>
+                </div>
+
+                <div class="pc-grid">
+                    <!-- Datos y período -->
+                    <section class="pc-panel pc-panel-ancho" aria-labelledby="pc-datos-titulo">
+                        <header class="pc-panel-encabezado">
+                            <h3 id="pc-datos-titulo">Datos del período</h3>
+                            <span class="pc-panel-nota">Semanas de domingo a sábado</span>
+                        </header>
+                        <div class="pc-campos">
+                            <div class="pc-campo">
+                                <label for="numero-empleados">Número de empleados</label>
+                                <input type="number" id="numero-empleados" class="pc-input config-input" value="1" min="1" max="50">
+                            </div>
+                            <div class="pc-campo">
+                                <label for="salario-mensual">Salario mensual base</label>
+                                <div class="pc-input-prefijo">
+                                    <span aria-hidden="true">$</span>
+                                    <input type="text" inputmode="numeric" pattern="[0-9]*" id="salario-mensual" class="pc-input config-input" value="1750905">
+                                </div>
+                            </div>
+                            <div class="pc-campo">
+                                <label for="fecha-inicio">Fecha de inicio</label>
+                                <input type="date" id="fecha-inicio" class="pc-input config-input">
+                                <span class="pc-ayuda" id="dia-semana-inicio"></span>
+                            </div>
+                            <div class="pc-campo">
+                                <label for="fecha-fin">Fecha de fin</label>
+                                <input type="date" id="fecha-fin" class="pc-input config-input">
+                                <span class="pc-ayuda" id="dia-semana-fin"></span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Turnos -->
+                    <section class="pc-panel" aria-labelledby="pc-turnos-titulo">
+                        <header class="pc-panel-encabezado">
+                            <h3 id="pc-turnos-titulo">Turnos</h3>
+                            <button type="button" id="btn-add-shift" class="pc-boton pc-boton-secundario pc-boton-sm">+ Nuevo turno</button>
+                        </header>
+                        <div id="dynamic-shifts-list" class="turnos-lista">
+                            <!-- Los turnos se renderizan desde JavaScript -->
+                        </div>
+                    </section>
+
+                    <!-- Alimentación -->
+                    <section class="pc-panel" aria-labelledby="pc-alimentacion-titulo">
+                        <header class="pc-panel-encabezado">
+                            <h3 id="pc-alimentacion-titulo">Alimentación</h3>
+                            <span class="pc-panel-nota">Se descuenta al inicio del turno</span>
+                        </header>
+                        <div class="pc-segmentado" role="radiogroup" aria-label="Tipo de alimentación">
+                            <input type="radio" id="tipo-sin-almuerzo" name="tipo-almuerzo" value="sin-almuerzo">
+                            <label for="tipo-sin-almuerzo">Sin descuento</label>
+                            <input type="radio" id="tipo-predefinido" name="tipo-almuerzo" value="predefinido" checked>
+                            <label for="tipo-predefinido">Tiempo fijo</label>
+                            <input type="radio" id="tipo-personalizado" name="tipo-almuerzo" value="personalizado">
+                            <label for="tipo-personalizado">Horario</label>
+                        </div>
+                        <div id="opciones-predefinidas" class="pc-subopciones">
+                            <span class="pc-subtitulo">Duración</span>
+                            <div class="pc-segmentado pc-segmentado-sm" role="radiogroup" aria-label="Duración de la alimentación">
+                                <input type="radio" id="almuerzo-30min" name="tiempo-almuerzo" value="0.5" checked>
+                                <label for="almuerzo-30min">30 minutos</label>
+                                <input type="radio" id="almuerzo-1hora" name="tiempo-almuerzo" value="1">
+                                <label for="almuerzo-1hora">1 hora</label>
+                            </div>
+                        </div>
+                        <div id="horario-personalizado" class="pc-subopciones" style="display: none;">
+                            <span class="pc-subtitulo">Rango de alimentación</span>
+                            <div class="pc-rango">
+                                <div class="pc-campo">
+                                    <label for="inicio-almuerzo">Inicio</label>
+                                    <input type="time" id="inicio-almuerzo" class="pc-input" value="12:00">
+                                </div>
+                                <div class="pc-campo">
+                                    <label for="fin-almuerzo">Fin</label>
+                                    <input type="time" id="fin-almuerzo" class="pc-input" value="13:00">
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Acciones -->
+                <div class="pc-acciones">
+                    <div class="pc-acciones-secundarias">
+                        <button id="btn-manual-usuario" class="pc-boton pc-boton-texto">Manual de usuario</button>
+                        <button id="btn-sistema-config" class="pc-boton pc-boton-texto">Configuración del sistema</button>
+                        <button id="btn-limpiar-todo" class="pc-boton pc-boton-texto pc-boton-texto-peligro">Limpiar todo</button>
+                    </div>
+                    <button id="btn-generar-periodo" class="pc-boton pc-boton-primario pc-boton-lg">Continuar a programación →</button>
+                </div>
+            </section>
 
             <!-- Sección de Entrada de Turnos -->
             <section id="seccion-turnos" style="display: none;">
                 <div class="tarjeta" style="margin-top: 1rem;">
-                    <h2 style="margin-top: 0;">Programación de Turnos</h2>
-                    <div class="info-periodo" id="info-periodo"></div>
-
-                    <!-- Lista de empleados agregados -->
-                    <div class="empleados-agregados">
-                        <h3>Empleados Agregados</h3>
-                        <div id="lista-empleados" class="lista-empleados">
-                            <!-- Los empleados se mostrarán aquí dinámicamente -->
+                    <div class="pc-titulo pc-titulo-seccion">
+                        <div>
+                            <h2>Programación de turnos</h2>
+                            <div class="info-periodo" id="info-periodo"></div>
                         </div>
                     </div>
 
-                    <!-- Contenedor dinámico para las semanas -->
-                    <div class="acciones-multi-empleado">
-                        <button id="btn-abrir-modal-empleado" class="action-btn secondary-btn">
-                            <span class="btn-icon">➕</span> Agregar Empleado
-                        </button>
-                    </div>
+                    <!-- Lista de empleados agregados -->
+                    <section class="pc-panel empleados-agregados" aria-labelledby="titulo-empleados">
+                        <header class="pc-panel-encabezado">
+                            <h3 id="titulo-empleados">Empleados</h3>
+                            <button id="btn-abrir-modal-empleado" class="pc-boton pc-boton-secundario pc-boton-sm">+ Agregar empleado</button>
+                        </header>
+                        <div id="lista-empleados" class="lista-empleados">
+                            <!-- Los empleados se mostrarán aquí dinámicamente -->
+                        </div>
+                    </section>
                     <div id="contenedor-semanas" class="contenedor-semanas"></div>
 
                     <div class="botones-accion">
@@ -423,7 +335,7 @@
         </main>
 
         <footer class="pie-pagina">
-            <p>&copy; 2026 Sistema de Control de Turnos - Todos los derechos reservados @alejostone</p>
+            <p>© 2026 Control de Turnos · Alejostone</p>
         </footer>
     </div>
 
@@ -444,6 +356,64 @@
             <div class="modal-footer modal-footer-acciones">
                 <button type="button" id="btn-cancelar-clave-config" class="boton-secundario">Cancelar</button>
                 <button type="button" id="btn-entrar-clave-config" class="boton-principal">Entrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para crear / editar un turno -->
+    <div id="modal-turno" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-turno">
+        <div class="modal-contenido modal-turno">
+            <div class="modal-header">
+                <h2 id="titulo-modal-turno">Nuevo turno</h2>
+                <button type="button" id="btn-cerrar-modal-turno" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="turno-vista-previa turno-fila" id="turno-vista-previa" aria-live="polite"></div>
+                <div class="pc-campos pc-campos-2">
+                    <div class="pc-campo">
+                        <label for="turno-nombre">Nombre</label>
+                        <input type="text" id="turno-nombre" class="pc-input" maxlength="30" placeholder="Ej. Tarde">
+                    </div>
+                    <div class="pc-campo">
+                        <label for="turno-codigo">Código</label>
+                        <input type="text" id="turno-codigo" class="pc-input pc-input-codigo" maxlength="4" autocomplete="off">
+                        <span class="pc-ayuda" id="turno-codigo-ayuda"></span>
+                    </div>
+                    <div class="pc-campo">
+                        <label for="turno-inicio">Hora de inicio</label>
+                        <input type="time" id="turno-inicio" class="pc-input">
+                    </div>
+                    <div class="pc-campo">
+                        <label for="turno-fin">Hora de fin</label>
+                        <input type="time" id="turno-fin" class="pc-input">
+                        <span class="pc-ayuda">Si el fin es menor que el inicio, el turno termina al día siguiente. Inicio = fin es un turno de 24 h.</span>
+                    </div>
+                </div>
+                <div class="pc-campo">
+                    <span class="pc-etiqueta">Color</span>
+                    <div class="selector-color">
+                        <button type="button" class="muestra-color" data-color="#FDE68A" style="background:#FDE68A" title="Amarillo claro"></button>
+                        <button type="button" class="muestra-color" data-color="#3B82F6" style="background:#3B82F6" title="Azul"></button>
+                        <button type="button" class="muestra-color" data-color="#8B5CF6" style="background:#8B5CF6" title="Violeta"></button>
+                        <button type="button" class="muestra-color" data-color="#14B8A6" style="background:#14B8A6" title="Verde azulado"></button>
+                        <button type="button" class="muestra-color" data-color="#F97316" style="background:#F97316" title="Naranja"></button>
+                        <button type="button" class="muestra-color" data-color="#EC4899" style="background:#EC4899" title="Rosado"></button>
+                        <button type="button" class="muestra-color" data-color="#64748B" style="background:#64748B" title="Gris azulado"></button>
+                        <label class="color-personalizado" title="Otro color">
+                            <input type="color" id="turno-color" aria-label="Otro color">
+                            <span>Otro</span>
+                        </label>
+                    </div>
+                </div>
+                <label class="pc-check">
+                    <input type="checkbox" id="turno-alimentacion">
+                    <span>Descontar alimentación en este turno</span>
+                </label>
+                <span id="error-modal-turno" class="mensaje-error-campo" role="alert"></span>
+            </div>
+            <div class="modal-footer modal-footer-acciones">
+                <button type="button" id="btn-cancelar-turno" class="pc-boton pc-boton-secundario">Cancelar</button>
+                <button type="button" id="btn-guardar-turno" class="pc-boton pc-boton-primario">Guardar turno</button>
             </div>
         </div>
     </div>
@@ -488,6 +458,6 @@
 
     <script defer src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script defer src="archivos/instructivo.js"></script>
-    <script defer src="archivos/TURNOS.js?v=202611131200"></script>
+    <script defer src="archivos/TURNOS.js?v=202611131600"></script>
 </body>
 </html>

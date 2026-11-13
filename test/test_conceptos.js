@@ -64,7 +64,22 @@ seccion("El Informe Horas Extras incluye las fechas de los conceptos");
   assert("11/10 incapacidad", tipo(11), "Incapacitado");
   assert("16/10 incapacidad", tipo(16), "Incapacitado");
   assert("17/10 libre no aparece", tipo(17), undefined);
-  assert("Días con concepto: 0 horas trabajadas", (filas.find((f) => f[2] === fecha(5)) || [])[6], "");
+  const horas = (d) => (filas.find((f) => f[2] === fecha(d)) || [])[6];
+  assert("Vacaciones lunes en semana con turnos: informa 7,33 h", horas(5), 7.33);
+  assert("Incapacidad martes en semana con turnos: informa 7,33 h", horas(13), 7.33);
+  assert("Incapacidad en festivo (12-oct-2026): no informa horas", horas(12), "");
+  assert("Domingo de vacaciones: no informa horas", horas(4), "");
+  assert("Domingo de incapacidad: no informa horas", horas(11), "");
+}
+{
+  const a = crearApp();
+  agregarEmpleado(a, { documento: "12", nombre: "sin turnos", inicio: "2026-10-18", semanas: [["C", "I", "I", "I", "I", "I", "C"]] });
+  a.calcularTurnos();
+  const filas = a._generarDatosInformeHorasExtras().data;
+  const lunes = filas.find((f) => f[2] === new Date(2026, 9, 19).toLocaleDateString("es-CO"));
+  assert("Semana sin turnos: la incapacidad aparece pero sin horas", [lunes && lunes[3], lunes && lunes[6]], ["Incapacitado", ""]);
+  const totales = filas[filas.length - 1];
+  assert("Las horas informativas no entran en los totales", totales.slice(7, 14).every((v) => v === ""), true);
 }
 
 terminar();

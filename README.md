@@ -35,7 +35,7 @@ El sistema permite programar turnos por empleado y calcular automáticamente rec
 ## 2. Características Principales
 
 - Programación de turnos por día y por empleado con selector visual de tarjetas (turnos y conceptos de nómina separados).
-- Turnos dinámicos: crear, editar, desactivar y **eliminar** (con limpieza real de referencias).
+- Turnos dinámicos: crear y editar en una ventana con vista previa (solo se guardan al confirmar), desactivar y **eliminar** (con limpieza real de referencias). Colores base: Día amarillo claro, Noche azul, 24 Horas violeta.
 - Turno manual por día específico.
 - Configuración de alimentación (sin, predefinida, personalizada).
 - Motor de cálculo minuto a minuto con clasificación **cronológica** al cruzar el tope.
@@ -258,7 +258,7 @@ Las horas de I/PR/V cubren la deuda excepto en domingo y festivo. Un concepto pe
 
 | Hoja | Contenido |
 |---|---|
-| Informe Horas Extras | Formato de importación a nómina (códigos 045, 046, 011, …). Una fila por día trabajado o con concepto |
+| Informe Horas Extras | Formato de importación a nómina (códigos 045, 046, 011, …). Una fila por día trabajado o con concepto. En I/V, "Horas Trabajadas" muestra las horas reconocidas (7,33) solo si ese día sumó al tope; es informativo y no entra en los totales |
 | Novedades de Nómina | Fechas de incapacidad, vacaciones, permisos, ausencias y sin contrato, con su efecto en el tope |
 | Liquidación de Pago | Valores por concepto y total por empleado (números con formato moneda) |
 | Resumen Total Horas | Totales del período, incluidas horas reconocidas por I/V |

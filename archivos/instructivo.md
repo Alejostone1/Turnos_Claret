@@ -107,9 +107,11 @@ El sistema crea y mantiene como base (marcados con 🔒):
 
 Se pueden **editar** (nombre, horario, color), pero no eliminar ni desactivar.
 
+Colores por defecto: Día amarillo claro, Noche azul, 24 Horas violeta.
+
 ### 5.2 Turnos dinámicos
 
-Puede crear turnos adicionales (ej. `T1`, `T2`, etc.) con nombre, código, horario, color, estado y la opción de descontar alimentación.
+Pulse **+ Nuevo turno**: se abre una ventana para definir nombre, código, horario, color y si descuenta alimentación, con una vista previa de las horas efectivas. El turno **solo se crea al pulsar Guardar turno**; Cancelar no crea nada. Para cambiar un turno existente use **Editar**.
 
 ### 5.3 Eliminar un turno
 
@@ -326,7 +328,7 @@ Exporta exactamente lo que se ve en resultados: todos los empleados o, en result
 
 | Hoja | Contenido |
 |---|---|
-| Informe Horas Extras | Una fila por día trabajado o con concepto, con códigos de exportación para nómina |
+| Informe Horas Extras | Una fila por día trabajado o con concepto, con códigos de exportación para nómina. En días de incapacidad o vacaciones, la columna Horas Trabajadas muestra las horas reconocidas (7,33) solo si ese día sumó al tope (semana con turnos, no domingo ni festivo); es informativo y no entra en los totales |
 | Novedades de Nómina | Fechas de incapacidad, vacaciones, permisos y demás conceptos, con su efecto en el tope |
 | Liquidación de Pago | Valores por concepto y total por empleado |
 | Resumen Total Horas | Totales del período, incluidas horas reconocidas por I/V |
@@ -388,6 +390,7 @@ En web usa descarga del navegador; en Electron, el diálogo de guardado.
 |---|---|---|
 | 2.1 | Jul-2026 | Manual anterior |
 | 3.0 | Jul-2026 | Revisión alineada a la lógica del sistema |
+| 4.1 | Nov-2026 | Nuevo diseño de la pantalla inicial y de la programación, ventana para crear/editar turnos, colores base de turnos, horas reconocidas de I/V en el Informe |
 | 4.0 | Nov-2026 | I/V suman al tope (7,33 h; no domingo/festivo; requiere turno real), clasificación cronológica, selector de tarjetas, colores fijos, contraseña, pre-guardado persistente, resultados individuales, eliminación de turnos y empleados, Excel auditado |
 
 ---

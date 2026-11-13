@@ -150,6 +150,43 @@ seccion("Eliminación de turnos dinámicos");
   assert("Las demás asignaciones se conservan", [...emp.turnosGuardados.values()].filter((t) => t.turno === "D").length, 1);
   assert("Los turnos base están protegidos", app.eliminarTurnoDinamico("D", { confirmar: false }), false);
 }
+seccion("Crear y editar turnos (modal)");
+{
+  const app = crearApp();
+  const emp = agregarEmpleado(app, { inicio: SEMANA, semanas: [["C", "MA", "C", "C", "C", "C", "C"]] });
+  assert("No crea sin nombre", app.guardarTurnoDinamico({ nombre: " ", codigo: "T9", inicio: "08:00", fin: "16:00" }).ok, false);
+  assert("No acepta código repetido", app.guardarTurnoDinamico({ nombre: "X", codigo: "D", inicio: "08:00", fin: "16:00" }).error, "El código D ya está en uso.");
+  assert("No acepta código de concepto", app.guardarTurnoDinamico({ nombre: "X", codigo: "I", inicio: "08:00", fin: "16:00" }).ok, false);
+  assert("No acepta código inválido", app.guardarTurnoDinamico({ nombre: "X", codigo: "T 1", inicio: "08:00", fin: "16:00" }).ok, false);
+  const r = app.guardarTurnoDinamico({ nombre: "Tarde", codigo: "tr", inicio: "14:00", fin: "22:00", color: "#14B8A6", descontarAlimentacion: false });
+  assert("Crea el turno al guardar (código en mayúsculas)", [r.ok, r.codigo, app.tiposTurno.TR && app.tiposTurno.TR.nombre], [true, "TR", "Tarde"]);
+  app.guardarTurnoDinamico({ nombre: "Madrugada", codigo: "MD", inicio: "04:00", fin: "12:00", color: "#fecaca", descontarAlimentacion: false }, "MA");
+  assert("Editar código migra los días asignados", [...emp.turnosGuardados.values()].map((t) => t.turno).includes("MD"), true);
+  assert("El código anterior desaparece", "MA" in app.configuracion.turnosDinamicos, false);
+  assert("Turno base: no permite cambiar su código", app.guardarTurnoDinamico({ nombre: "Día", codigo: "DD", inicio: "06:00", fin: "18:00" }, "D").ok, false);
+  const ok = app.guardarTurnoDinamico({ nombre: "Día", codigo: "D", inicio: "06:00", fin: "14:00", color: "#FDE68A" }, "D");
+  assert("Turno base: sí permite cambiar horario", [ok.ok, app.configuracion.turnosDinamicos.D.fin], [true, "14:00"]);
+}
+{
+  const app = crearApp();
+  localStorage.setItem("configuracionTurnos", JSON.stringify({
+    ...app.configuracion,
+    versionTurnos: undefined,
+    turnosDinamicos: {
+      D: { codigo: "D", nombre: "Día", inicio: "07:00", fin: "19:00", color: "#fef3c7", activo: true },
+      N: { codigo: "N", nombre: "Noche", inicio: "19:00", fin: "07:00", color: "#123456", activo: true },
+      "24T": { codigo: "24T", nombre: "24 Horas", inicio: "07:00", fin: "07:00", color: "#e9d5ff", activo: true },
+    },
+  }));
+  const conf = app.cargarConfiguracion();
+  assert("Colores base: Día amarillo claro y 24 h violeta (desde el color anterior)", [conf.turnosDinamicos.D.color, conf.turnosDinamicos["24T"].color], ["#FDE68A", "#8B5CF6"]);
+  assert("Colores base: un color personalizado se respeta", conf.turnosDinamicos.N.color, "#123456");
+  localStorage.clear();
+  const nueva = crearApp().cargarConfiguracion();
+  assert("Instalación nueva: Noche azul", nueva.turnosDinamicos.N.color, "#3B82F6");
+}
+
+seccion("Eliminar empleado");
 {
   const app = crearApp();
   agregarEmpleado(app, { documento: "1", inicio: SEMANA, semanas: [["C", "D", "D", "C", "C", "C", "C"]] });
