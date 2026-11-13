@@ -3812,3 +3812,389 @@ body {
         font-size: 1.15rem;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v5 — Selector de turnos, pre-guardado, resultados individuales,
+        acceso a configuración y validaciones
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Selector de turnos (botón) ─────────────────────────────────────── */
+.dia-turno {
+  min-width: 150px;
+  flex: 1 1 150px;
+  max-width: 220px;
+}
+.custom-select,
+.custom-select-toggle {
+  min-width: 0;
+  width: 100%;
+}
+.selector-wrapper {
+  display: flex;
+  width: 100%;
+}
+.select-indicator {
+  display: none;
+}
+.custom-select-toggle {
+  padding: 8px 10px;
+  border-radius: var(--radio-borde-sm);
+  text-align: left;
+  font: inherit;
+}
+.custom-select-toggle:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+}
+.custom-select-value {
+  min-width: 0;
+  flex: 1;
+}
+.custom-select-value .item-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: 0 0 12px;
+  border: 1px solid rgba(15, 23, 42, 0.25);
+}
+.custom-select-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.custom-select-nombre {
+  font-weight: 600;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.custom-select-detalle {
+  font-size: 0.72rem;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+/* ─── Panel de selección (tarjetas) ──────────────────────────────────── */
+.turno-picker-panel {
+  position: absolute;
+  z-index: 10000;
+  background: var(--color-blanco);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-borde-md);
+  box-shadow: var(--sombra-hover);
+  padding: 14px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  animation: turnoPickerIn 120ms ease-out;
+}
+@keyframes turnoPickerIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.turno-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--color-borde);
+}
+.turno-picker-titulo {
+  font-weight: 700;
+  color: var(--color-texto);
+}
+.turno-picker-dia {
+  font-size: 0.85rem;
+  color: var(--color-texto-claro);
+}
+.turno-picker-grupo + .turno-picker-grupo {
+  margin-top: 14px;
+}
+.turno-picker-grupo-titulo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-texto-claro);
+  margin-bottom: 8px;
+}
+.turno-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+.turno-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px 10px 12px;
+  background: var(--color-blanco);
+  border: 1px solid var(--color-borde);
+  border-left: 5px solid var(--turno-color);
+  border-radius: var(--radio-borde-sm);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--color-texto);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.turno-card:hover {
+  background: var(--color-fondo-panel);
+  box-shadow: var(--sombra-suave);
+}
+.turno-card:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 1px;
+}
+.turno-card.seleccionado {
+  border-color: var(--turno-color);
+  box-shadow: 0 0 0 2px var(--turno-color);
+}
+.turno-card-codigo {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 3px 6px;
+  border-radius: var(--radio-borde-sm);
+  background: var(--turno-color);
+  color: var(--turno-texto);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+.turno-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.turno-card-nombre {
+  font-weight: 600;
+  font-size: 0.88rem;
+  line-height: 1.2;
+}
+.turno-card-detalle {
+  font-size: 0.75rem;
+  color: var(--color-texto-claro);
+}
+.turno-card-check {
+  flex: 0 0 18px;
+  font-weight: 700;
+  color: var(--color-primario);
+}
+
+/* ─── Acciones por empleado (pre-guardar / ver resultados) ──────────── */
+.empleado-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-borde);
+}
+.empleado-acciones-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.empleado-acciones .btn-pre-guardar-individual {
+  margin: 0;
+  background: var(--color-exito);
+  box-shadow: none;
+  border-radius: var(--radio-borde-sm);
+  font-size: 0.95rem;
+}
+.empleado-acciones .btn-pre-guardar-individual:hover {
+  background: #047857;
+  transform: none;
+}
+.btn-ver-resultados-individual {
+  padding: 0.75rem 1.25rem;
+  background: var(--color-primario);
+  color: var(--color-blanco);
+  border: none;
+  border-radius: var(--radio-borde-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.btn-ver-resultados-individual:hover {
+  background: var(--color-primario-hover);
+}
+.estado-guardado {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-texto-claro);
+}
+.estado-guardado.estado-ok {
+  color: var(--color-exito);
+}
+.estado-guardado.estado-pendiente {
+  color: var(--color-advertencia);
+}
+.btn-ver-resultados-lista {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 4px;
+}
+
+/* ─── Aviso de programación guardada ────────────────────────────────── */
+.aviso-programacion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 1rem;
+  padding: 14px 18px;
+  background: var(--color-primario-light);
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid var(--color-primario);
+  border-radius: var(--radio-borde);
+}
+.aviso-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-texto);
+}
+.aviso-detalle {
+  font-size: 0.88rem;
+  color: var(--color-texto-claro);
+}
+.aviso-acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ─── Modal de contraseña y validaciones ────────────────────────────── */
+.modal-clave {
+  max-width: 420px;
+}
+.modal-clave-ayuda {
+  margin: 0 0 1rem;
+  color: var(--color-texto-claro);
+  font-size: 0.92rem;
+}
+.modal-footer-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.mensaje-error-campo {
+  display: block;
+  min-height: 1.1em;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+/* ─── Resultados individuales ───────────────────────────────────────── */
+.info-resultado-individual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.info-resultado-individual h4 {
+  margin: 4px 0;
+}
+.info-resultado-individual small {
+  font-weight: 500;
+  color: var(--color-texto-claro);
+}
+.etiqueta-modo {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radio-borde-pill);
+  background: var(--color-primario-light);
+  color: var(--color-primario);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tope-equivalentes.tope-reconocidas {
+  color: #1565c0;
+}
+.tope-equivalentes.tope-sin-turno {
+  color: var(--color-advertencia);
+}
+.item-resumen.reconocida-incapacidad {
+  border-left: 4px solid #1E88E5;
+}
+.item-resumen.reconocida-vacaciones {
+  border-left: 4px solid #2E7D32;
+}
+
+.btn-eliminar-empleado {
+  background-color: var(--color-error-light);
+  border: 1px solid #fecaca;
+  color: var(--color-error);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 6px;
+}
+.btn-eliminar-empleado:hover {
+  background-color: #fee2e2;
+}
+
+/* ─── Turnos dinámicos ──────────────────────────────────────────────── */
+.shift-protegido {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-texto-claro);
+  background: var(--color-fondo-panel);
+  border: 1px solid var(--color-borde);
+  border-radius: var(--radio-borde-pill);
+  padding: 2px 8px;
+}
+.delete-shift-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radio-borde-sm);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 2px 6px;
+}
+.delete-shift-btn:hover {
+  background: var(--color-error-light);
+  border-color: #fecaca;
+}
+
+@media (max-width: 640px) {
+  .dia-turno {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  .empleado-acciones,
+  .empleado-acciones-botones {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .turno-picker-grid {
+    grid-template-columns: 1fr;
+  }
+  .item-empleado {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+  .item-empleado .empleado-fechas {
+    flex-basis: 100%;
+    order: 3;
+  }
+}

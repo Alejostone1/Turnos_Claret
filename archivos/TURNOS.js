@@ -1,7 +1,15 @@
 /**
  * Sistema de Control de Turnos y Cálculo de Horas Extras - Versión Mejorada
  * Maneja períodos completos con cálculo semanal y acumulado correcto
- * Versión: 4.8
+ * Versión: 5.0
+ *
+ * CAMBIOS v5.0:
+ * - Incapacidad y vacaciones suman 7,33 h al tope de 42 h (no en domingo ni festivo,
+ *   y solo si la semana tiene al menos un turno realmente trabajado)
+ * - Clasificación cronológica real al cruzar el tope (antes se agrupaba diurno/nocturno)
+ * - Selector de turnos con tarjetas, colores fijos de conceptos, contraseña de configuración
+ * - Pre-guardado persistente, resultados individuales, eliminación real de turnos y empleados
+ * - Exportación Excel auditada (números reales, columnas alineadas, hoja de novedades)
  *
  * CAMBIOS v4.8:
  * - Salario mínimo actualizado a $1.750.905
@@ -106,159 +114,190 @@ class SistemaTurnosMejorado {
   }
 
   /**
-   * Reemplaza selects nativos por un componente visual consistente (custom select)
-   * que renderiza las opciones con indicadores de color y fondo personalizado.
-   * Mantiene sincronizado el <select> nativo (lo oculta visualmente).
+   * Reemplaza cada <select> de turno por un selector visual de tarjetas.
+   * El <select> nativo sigue siendo la fuente de verdad (oculto y sincronizado),
+   * así el cálculo, el pre-guardado y la accesibilidad no dependen del componente visual.
    */
   inicializarCustomSelects() {
     if (typeof document === 'undefined') return;
+
+    // Un único listener global cierra el panel abierto (no uno por selector)
+    if (!this._selectorGlobalInit) {
+      this._selectorGlobalInit = true;
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.turno-picker-panel') && !e.target.closest('.custom-select-toggle')) {
+          this._cerrarPanelTurnos();
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') this._cerrarPanelTurnos(true);
+      });
+    }
+
     document.querySelectorAll('.selector-wrapper').forEach(wrapper => {
       const select = wrapper.querySelector('.selector-turno');
       if (!select || select.dataset.customInit === '1') return;
 
-      // Crear estructura
       const custom = document.createElement('div');
       custom.className = 'custom-select';
 
       const toggle = document.createElement('button');
       toggle.type = 'button';
       toggle.className = 'custom-select-toggle';
-      toggle.setAttribute('aria-haspopup', 'listbox');
+      toggle.setAttribute('aria-haspopup', 'dialog');
+      toggle.setAttribute('aria-expanded', 'false');
 
       const valueSpan = document.createElement('div');
       valueSpan.className = 'custom-select-value';
 
       const caret = document.createElement('span');
       caret.className = 'select-caret';
-      caret.innerHTML = '▾';
+      caret.textContent = '▾';
 
       toggle.appendChild(valueSpan);
       toggle.appendChild(caret);
-
-      const list = document.createElement('div');
-      list.className = 'custom-select-list';
-      list.style.display = 'none';
-      // We'll attach the list to body when opened to avoid clipping by overflow:hidden parents
-      list.dataset.attached = '0';
-
-      // Construir items desde options
-      Array.from(select.options).forEach(opt => {
-        const item = document.createElement('div');
-        item.className = 'custom-select-item';
-        item.dataset.value = opt.value;
-
-        const ind = document.createElement('span');
-        ind.className = 'item-indicator';
-        const color = opt.dataset.color || (this.tiposTurno[opt.value] && this.tiposTurno[opt.value].color) || '#9e9e9e';
-        ind.style.background = color;
-        ind.style.border = '1px solid rgba(0,0,0,0.08)';
-
-        const estilosItem = this.calcularEstilosDeColor(color);
-        // aplicar background ligero al item y contraste de texto
-        item.style.background = estilosItem.bg;
-        item.style.color = estilosItem.text;
-        item.style.borderBottom = `1px solid ${estilosItem.border}22`;
-
-        const txt = document.createElement('span');
-        txt.className = 'item-text';
-        txt.innerHTML = opt.textContent;
-
-        item.appendChild(ind);
-        item.appendChild(txt);
-        list.appendChild(item);
-
-        item.addEventListener('click', () => {
-          select.value = opt.value;
-          select.dispatchEvent(new Event('change'));
-          // Close
-          if (list.dataset.attached === '1') {
-            list.style.display = 'none';
-            list.dataset.attached = '0';
-            if (list.parentNode === document.body) document.body.removeChild(list);
-          }
-          toggle.setAttribute('aria-expanded', 'false');
-          this._updateCustomValue(select, valueSpan);
-        });
-      });
-
       custom.appendChild(toggle);
-      custom.appendChild(list);
 
-      // Insert custom before select and hide select visually
       wrapper.insertBefore(custom, select);
       select.setAttribute('aria-hidden', 'true');
+      select.tabIndex = -1;
       select.dataset.customInit = '1';
 
-      // Mantener sincronizado el valor mostrado cuando el <select> cambie (programáticamente o por código)
+      // Mantener sincronizado el valor mostrado cuando el <select> cambie
       select.addEventListener('change', () => this._updateCustomValue(select, valueSpan));
-
-      // Open/close: attach list to body and position to avoid clipping
-      const openList = () => {
-        // close other lists
-        document.querySelectorAll('.custom-select-list[data-attached="1"]').forEach(l => {
-          l.style.display = 'none';
-          l.dataset.attached = '0';
-          if (l.parentNode === document.body) document.body.removeChild(l);
-        });
-
-        // attach to body
-        document.body.appendChild(list);
-        list.style.position = 'absolute';
-        list.style.zIndex = '9999';
-        list.style.display = '';
-        list.dataset.attached = '1';
-
-        const rect = toggle.getBoundingClientRect();
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-        const estimatedHeight = Math.min(list.scrollHeight || 280, viewportHeight - 96);
-        const width = Math.min(Math.max(rect.width, 280), Math.min(viewportWidth - 24, 420));
-        let top = rect.bottom + window.scrollY + 8;
-        if (rect.bottom + estimatedHeight + 16 > viewportHeight && rect.top > estimatedHeight + 16) {
-          top = rect.top + window.scrollY - estimatedHeight - 8;
-        }
-        let left = rect.left + window.scrollX;
-        if (left + width + 16 > viewportWidth + window.scrollX) {
-          left = Math.max(12 + window.scrollX, viewportWidth + window.scrollX - width - 16);
-        }
-        list.style.left = `${left}px`;
-        list.style.top = `${top}px`;
-        list.style.width = `${width}px`;
-        list.style.maxHeight = `${Math.min(estimatedHeight, viewportHeight - 96)}px`;
-      };
-
-      const closeList = () => {
-        list.style.display = 'none';
-        list.dataset.attached = '0';
-        if (list.parentNode === document.body) document.body.removeChild(list);
-      };
 
       toggle.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (list.dataset.attached === '1') closeList(); else openList();
+        if (this._panelTurnosAbierto && this._panelTurnosAbierto.select === select) {
+          this._cerrarPanelTurnos();
+        } else {
+          this._abrirPanelTurnos(select, toggle);
+        }
       });
 
-      // Close on outside click
-      document.addEventListener('click', () => { closeList(); });
-
-      // Initialize displayed value
       this._updateCustomValue(select, valueSpan);
     });
   }
 
+  /**
+   * Datos de presentación de una opción de turno: nombre, horario y color.
+   */
+  _datosOpcionTurno(opt) {
+    const codigo = opt.value;
+    const tipo = this.tiposTurno?.[codigo] || {};
+    const color = this._esConceptoConColorFijo(codigo)
+      ? SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS[codigo]
+      : (opt.dataset.color || tipo.color || '#9e9e9e');
+    const detalle = tipo.inicio && tipo.fin
+      ? `${this.formatearHoraAMPM(tipo.inicio)} – ${this.formatearHoraAMPM(tipo.fin)}`
+      : (tipo.descripcion && tipo.descripcion !== tipo.nombre ? tipo.descripcion : '');
+    return { codigo, nombre: tipo.nombre || codigo, detalle, color, grupo: opt.dataset.grupo || 'turno' };
+  }
+
+  _abrirPanelTurnos(select, toggle) {
+    this._cerrarPanelTurnos();
+
+    const panel = document.createElement('div');
+    panel.className = 'turno-picker-panel';
+    panel.setAttribute('role', 'dialog');
+
+    const diaTurno = select.closest('.dia-turno');
+    const label = diaTurno?.querySelector('label');
+    const etiquetaDia = label
+      ? (label.innerText || label.textContent).split(/\n+/).map((t) => t.trim()).filter(Boolean).join(' · ')
+      : '';
+
+    const opciones = Array.from(select.options).map((opt) => this._datosOpcionTurno(opt));
+    const grupos = [
+      { titulo: 'Turnos', items: opciones.filter((o) => o.grupo !== 'concepto') },
+      { titulo: 'Conceptos de nómina', items: opciones.filter((o) => o.grupo === 'concepto') },
+    ].filter((g) => g.items.length);
+
+    panel.innerHTML = `
+      <div class="turno-picker-header">
+        <span class="turno-picker-titulo">Seleccionar turno</span>
+        <span class="turno-picker-dia">${this._escaparHTML(etiquetaDia)}</span>
+      </div>
+      ${grupos.map((g) => `
+        <div class="turno-picker-grupo">
+          <div class="turno-picker-grupo-titulo">${g.titulo}</div>
+          <div class="turno-picker-grid">
+            ${g.items.map((o) => {
+              const estilos = this.calcularEstilosDeColor(o.color);
+              const activo = o.codigo === select.value;
+              return `
+                <button type="button" class="turno-card${activo ? ' seleccionado' : ''}" data-value="${this._escaparHTML(o.codigo)}"
+                  style="--turno-color:${o.color}; --turno-texto:${estilos.text};" aria-pressed="${activo}">
+                  <span class="turno-card-codigo">${this._escaparHTML(o.codigo)}</span>
+                  <span class="turno-card-info">
+                    <span class="turno-card-nombre">${this._escaparHTML(o.nombre)}</span>
+                    ${o.detalle ? `<span class="turno-card-detalle">${this._escaparHTML(o.detalle)}</span>` : ''}
+                  </span>
+                  <span class="turno-card-check" aria-hidden="true">${activo ? '✓' : ''}</span>
+                </button>`;
+            }).join('')}
+          </div>
+        </div>`).join('')}
+    `;
+
+    panel.addEventListener('click', (e) => {
+      const card = e.target.closest('.turno-card');
+      if (!card) return;
+      e.stopPropagation();
+      select.value = card.dataset.value;
+      // bubbles: true para que el contenedor detecte el cambio (cambios sin guardar)
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      this._cerrarPanelTurnos(true);
+    });
+
+    document.body.appendChild(panel);
+    this._panelTurnosAbierto = { panel, select, toggle };
+    toggle.setAttribute('aria-expanded', 'true');
+
+    // Posicionar junto al selector sin salirse de la ventana
+    const rect = toggle.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const ancho = Math.min(600, vw - 24);
+    panel.style.width = `${ancho}px`;
+    const alto = Math.min(panel.scrollHeight, vh - 32);
+    panel.style.maxHeight = `${vh - 32}px`;
+    let left = rect.left + window.scrollX;
+    if (left + ancho > window.scrollX + vw - 12) left = window.scrollX + vw - ancho - 12;
+    left = Math.max(window.scrollX + 12, left);
+    let top = rect.bottom + window.scrollY + 6;
+    if (rect.bottom + alto + 12 > vh && rect.top > alto + 12) {
+      top = rect.top + window.scrollY - alto - 6;
+    } else if (rect.bottom + alto + 12 > vh) {
+      top = window.scrollY + Math.max(16, vh - alto - 16);
+    }
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+
+    const seleccionado = panel.querySelector('.turno-card.seleccionado') || panel.querySelector('.turno-card');
+    if (seleccionado) seleccionado.focus({ preventScroll: true });
+  }
+
+  _cerrarPanelTurnos(devolverFoco = false) {
+    const abierto = this._panelTurnosAbierto;
+    if (!abierto) return;
+    abierto.panel.remove();
+    abierto.toggle.setAttribute('aria-expanded', 'false');
+    if (devolverFoco) abierto.toggle.focus({ preventScroll: true });
+    this._panelTurnosAbierto = null;
+  }
+
   _updateCustomValue(select, valueSpan) {
     const opt = select.options[select.selectedIndex];
-    const color = opt && opt.dataset && opt.dataset.color ? opt.dataset.color : (this.tiposTurno[opt.value] && this.tiposTurno[opt.value].color) || '#9e9e9e';
-    const texto = opt ? opt.textContent : '';
-    const estilos = this.calcularEstilosDeColor(color);
-    valueSpan.innerHTML = '';
-    const ind = document.createElement('span');
-    ind.className = 'item-indicator';
-    ind.style.background = color;
-    ind.style.border = '1px solid rgba(0,0,0,0.08)';
-    const txt = document.createElement('span'); txt.textContent = texto;
-    valueSpan.appendChild(ind);
-    valueSpan.appendChild(txt);
+    if (!opt) return;
+    const datos = this._datosOpcionTurno(opt);
+    const estilos = this.calcularEstilosDeColor(datos.color);
+
+    valueSpan.innerHTML = `
+      <span class="custom-select-texto" title="${this._escaparHTML(`${datos.codigo} · ${datos.nombre}${datos.detalle ? ` (${datos.detalle})` : ''}`)}">
+        <span class="custom-select-nombre">${this._escaparHTML(datos.nombre)}</span>
+        ${datos.detalle ? `<span class="custom-select-detalle">${this._escaparHTML(datos.detalle)}</span>` : ''}
+      </span>`;
 
     const toggle = valueSpan.closest('.custom-select-toggle');
     if (toggle) {
@@ -325,12 +364,12 @@ class SistemaTurnosMejorado {
     const coloresEspeciales = {
       C: { bg: "#bbf7d0", text: "#064e3b", border: "#86efac" },
       M: { bg: "#fef9c3", text: "#713f12", border: "#fde047" },
-      I: { bg: "#ffe4e6", text: "#991b1b", border: "#fecdd3" },
-      SC: { bg: "#f3f4f6", text: "#4b5563", border: "#e5e7eb" },
-      PR: { bg: "#e0e7ff", text: "#3730a3", border: "#c7d2fe" },
-      A: { bg: "#fee2e2", text: "#991b1b", border: "#fecaca" },
-      V: { bg: "#e0f2fe", text: "#0c4a6e", border: "#bae6fd" }
     };
+
+    // Conceptos base: color fijo, nunca sobrescrito por configuración
+    if (this._esConceptoConColorFijo(codigo)) {
+      return this.calcularEstilosDeColor(SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS[codigo]);
+    }
 
     // Allow admin-configured special types to override built-in palette
     if (this.configuracion && this.configuracion.tiposTurnoEspeciales && this.configuracion.tiposTurnoEspeciales[codigo] && this.configuracion.tiposTurnoEspeciales[codigo].color) {
@@ -382,8 +421,7 @@ class SistemaTurnosMejorado {
   crearBadgeTurnoHTML(codigo, texto) {
     const estilo = this.obtenerColorTurno(codigo) || { bg: '#9e9e9e', text: '#ffffff', border: '#7a7a7a' };
     const inline = `background:${estilo.bg}; color:${estilo.text}; border:1px solid ${estilo.border};`;
-    // Indicador pequeño + texto
-    return `<span class="turno-badge" style="${inline}"><span class="turno-indicator" style="background:${estilo.bg}; border:1px solid ${estilo.border}"></span><span class="turno-text">${texto}</span></span>`;
+    return `<span class="turno-badge" style="${inline}"><span class="turno-text">${texto}</span></span>`;
   }
 
   _toMinutes(time) {
@@ -497,6 +535,9 @@ class SistemaTurnosMejorado {
       M: { nombre: "Turno Manual", horas: 0, descripcion: "Manual", color: "#fef9c3" },
       ...this.configuracion.tiposTurnoEspeciales,
     };
+    Object.entries(SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS).forEach(([codigo, color]) => {
+      if (this.tiposTurno[codigo]) this.tiposTurno[codigo] = { ...this.tiposTurno[codigo], color };
+    });
 
     const configuracionAlmuerzo = typeof this.obtenerConfiguracionAlmuerzo === 'function'
       ? this.obtenerConfiguracionAlmuerzo()
@@ -546,37 +587,15 @@ class SistemaTurnosMejorado {
         extraNocturna: { porcentaje: 75 },
         extraDiurnaFestiva: { porcentaje: 115 },
         extraNocturnaFestiva: { porcentaje: 165 },
-        tiposTurnoEspeciales: {
-          I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad", color: "#42A5F5" },
-          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#90A4AE" },
-          PR: {
-            nombre: "Permiso remunerado",
-            horas: 7,
-            descripcion: "Permiso remunerado",
-            color: "#66BB6A"
-          },
-          A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia", color: "#EF5350" },
-          V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones", color: "#2E7D32" },
-        },
-        versionConceptos: 2,
+        tiposTurnoEspeciales: this._conceptosPorDefecto(),
+        versionConceptos: 3,
       };
     }
-    const huboLimpiezaInicial = this._eliminarConceptosObsoletos(config);
+    let huboLimpiezaInicial = this._eliminarConceptosObsoletos(config);
 
     // Asegurarse de que la configuración vieja tenga los nuevos tipos
     if (!config.tiposTurnoEspeciales) {
-      config.tiposTurnoEspeciales = {
-        I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad", color: "#42A5F5" },
-        SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#90A4AE" },
-        PR: {
-          nombre: "Permiso remunerado",
-          horas: 7,
-          descripcion: "Permiso remunerado",
-          color: "#66BB6A"
-        },
-        A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia", color: "#EF5350" },
-        V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones", color: "#2E7D32" },
-      };
+      config.tiposTurnoEspeciales = this._conceptosPorDefecto();
     }
 
     // Migración v2: A y SC pasan a tener horas equivalentes funcionales (7h)
@@ -586,6 +605,19 @@ class SistemaTurnosMejorado {
       if (esp?.SC && esp.SC.horas === 0) esp.SC.horas = 7;
       config.versionConceptos = 2;
     }
+
+    // Migración v3: I y V pasan de 7 h (valor anterior por defecto) a 7,33 h
+    if (config.versionConceptos < 3) {
+      const esp = config.tiposTurnoEspeciales;
+      ["I", "V"].forEach((codigo) => {
+        if (esp?.[codigo] && Number(esp[codigo].horas) === 7) esp[codigo].horas = 7.33;
+      });
+      config.versionConceptos = 3;
+      huboLimpiezaInicial = true;
+    }
+
+    // Los conceptos base conservan siempre su color identificativo
+    if (this._aplicarColoresFijos(config)) huboLimpiezaInicial = true;
 
     // FASE 1: Migración a Turnos Dinámicos
     if (!config.turnosDinamicos) {
@@ -639,6 +671,55 @@ class SistemaTurnosMejorado {
     return config;
   }
 
+  /**
+   * Conceptos de nómina base. I y V aportan 7,33 h por defecto.
+   */
+  _conceptosPorDefecto() {
+    const c = SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS;
+    return {
+      I: { nombre: "Incapacitado", horas: 7.33, descripcion: "Incapacidad", color: c.I },
+      SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: c.SC },
+      PR: { nombre: "Permiso remunerado", horas: 7, descripcion: "Permiso remunerado", color: c.PR },
+      A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia", color: c.A },
+      V: { nombre: "Vacaciones", horas: 7.33, descripcion: "Vacaciones", color: c.V },
+    };
+  }
+
+  /**
+   * Fuerza el color identificativo de los conceptos base. Retorna true si cambió algo.
+   */
+  _aplicarColoresFijos(config) {
+    let cambio = false;
+    const esp = config && config.tiposTurnoEspeciales;
+    if (!esp) return false;
+    Object.entries(SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS).forEach(([codigo, color]) => {
+      if (esp[codigo] && esp[codigo].color !== color) {
+        esp[codigo].color = color;
+        cambio = true;
+      }
+    });
+    return cambio;
+  }
+
+  _describirReglaConcepto(codigo) {
+    switch (this._obtenerComportamientoConceptoEspecial(codigo)) {
+      case "suma_tope":
+        return "Suma estas horas al acumulado de 42 h (no en domingo ni festivo, y solo si la semana tiene un turno trabajado).";
+      case "cubre_deuda":
+        return "No suma para extras; solo cubre las horas faltantes de la semana.";
+      case "resta":
+        return "Resta estas horas del acumulado semanal.";
+      case "reduce_tope":
+        return "Reduce el tope semanal en estas horas (lunes a sábado).";
+      default:
+        return "Sin efecto en el cálculo semanal.";
+    }
+  }
+
+  _esConceptoConColorFijo(codigo) {
+    return Object.prototype.hasOwnProperty.call(SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS, codigo);
+  }
+
   _eliminarConceptosObsoletos(config) {
     if (!config || typeof config !== "object") return;
     let huboCambios = false;
@@ -689,34 +770,22 @@ class SistemaTurnosMejorado {
       .replace(/[^a-z0-9]/g, "");
   }
 
-  _esConceptoConHorasEquivalentesParaTope(codigo, tipoConfig) {
-    const codigoNormalizado = this._normalizarTexto(codigo);
-    const nombreNormalizado = this._normalizarTexto(tipoConfig?.nombre);
-    const descripcionNormalizada = this._normalizarTexto(tipoConfig?.descripcion);
-
-    if (["i", "pr", "v"].includes(codigoNormalizado)) return true;
-
-    const texto = `${nombreNormalizado} ${descripcionNormalizada}`;
-    return (
-      texto.includes("incapac") ||
-      texto.includes("vacacion") ||
-      (texto.includes("permiso") && texto.includes("remuner"))
-    );
-  }
-
-  _obtenerHorasEquivalentesParaTope(codigoTurno) {
-    const tipoConfig = this.configuracion?.tiposTurnoEspeciales?.[codigoTurno];
-    if (!tipoConfig) return 0;
-    if (!this._esConceptoConHorasEquivalentesParaTope(codigoTurno, tipoConfig)) {
-      return 0;
-    }
-    const horas = parseFloat(tipoConfig.horas);
-    return Number.isFinite(horas) && horas > 0 ? horas : 0;
+  /**
+   * Clave de fecha YYYY-MM-DD en hora LOCAL.
+   * (toISOString usa UTC y puede correr la fecha un día según la zona horaria.)
+   */
+  _fechaKey(fecha) {
+    const anio = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dia = String(fecha.getDate()).padStart(2, "0");
+    return `${anio}-${mes}-${dia}`;
   }
 
   /**
    * Determina el comportamiento de un concepto especial respecto al tope semanal:
-   * 'cubre_deuda' → I, PR, V: NO suman al acumulador de extras; solo cubren la deuda semanal
+   * 'suma_tope'   → I, V: suman sus horas al acumulado semanal (no en domingo ni festivo,
+   *                 y solo si la semana tiene al menos un turno realmente trabajado)
+   * 'cubre_deuda' → PR: no suma al acumulado de extras; solo cubre la deuda semanal
    * 'resta'       → A: resta horas equivalentes del acumulador (dificulta alcanzar el tope)
    * 'reduce_tope' → SC: reduce el tope semanal (solo lunes–sábado, nunca domingo)
    * 'ninguno'     → sin efecto sobre el tope
@@ -730,52 +799,95 @@ class SistemaTurnosMejorado {
 
     if (codigoNorm === "sc" || texto.includes("sincontrato")) return "reduce_tope";
     if (codigoNorm === "a" || texto.includes("ausencia")) return "resta";
+    if (codigoNorm === "pr" || (texto.includes("permiso") && texto.includes("remuner"))) return "cubre_deuda";
     if (
-      ["i", "pr", "v"].includes(codigoNorm) ||
+      ["i", "v"].includes(codigoNorm) ||
       texto.includes("incapac") ||
-      texto.includes("vacacion") ||
-      (texto.includes("permiso") && texto.includes("remuner"))
-    ) return "cubre_deuda";
+      texto.includes("vacacion")
+    ) return "suma_tope";
 
     return "ninguno";
   }
 
   /**
-   * Retorna { ajusteAcumulador, ajusteTope, horasCubreDeuda } para un código de concepto.
-   * - ajusteAcumulador: variación al acumulador de horas para extras (<0 resta, A)
-   * - ajusteTope:       variación al tope semanal (<0 para SC, 0 para el resto)
-   * - horasCubreDeuda:  horas justificadas que solo descuentan la deuda semanal (I/PR/V)
-   * @param {string}  codigo     Código del concepto
-   * @param {boolean} esDomingo  true si el día es domingo (SC no reduce tope en domingo)
+   * Tipo de concepto reconocido para reportes: 'incapacidad', 'vacaciones', 'permiso' o null.
    */
-  _obtenerAjusteConceptoEspecial(codigo, esDomingo = false) {
+  _obtenerCategoriaConcepto(codigo) {
+    const tipoConfig = this.configuracion?.tiposTurnoEspeciales?.[codigo];
+    if (!tipoConfig) return null;
+    const codigoNorm = this._normalizarTexto(codigo);
+    const texto = `${this._normalizarTexto(tipoConfig.nombre)} ${this._normalizarTexto(tipoConfig.descripcion)}`;
+    if (codigoNorm === "i" || texto.includes("incapac")) return "incapacidad";
+    if (codigoNorm === "v" || texto.includes("vacacion")) return "vacaciones";
+    if (codigoNorm === "pr" || (texto.includes("permiso") && texto.includes("remuner"))) return "permiso";
+    return null;
+  }
+
+  /**
+   * Retorna { ajusteAcumulador, ajusteTope, horasCubreDeuda, horasReconocidas } para un concepto.
+   * - ajusteAcumulador: variación al acumulador de horas para extras (>0 I/V, <0 A)
+   * - ajusteTope:       variación al tope semanal (<0 para SC, 0 para el resto)
+   * - horasCubreDeuda:  horas justificadas que descuentan la deuda semanal (I/PR/V)
+   * - horasReconocidas: horas de I/V que efectivamente suman al acumulado semanal
+   * @param {string}  codigo  Código del concepto
+   * @param {boolean} esDomingo  true si el día es domingo (SC no reduce tope en domingo)
+   * @param {object}  [contexto]  { esFestivo, semanaConTurnoReal } para I/V
+   */
+  _obtenerAjusteConceptoEspecial(codigo, esDomingo = false, contexto = {}) {
     const comportamiento = this._obtenerComportamientoConceptoEspecial(codigo);
     const tipoConfig = this.configuracion?.tiposTurnoEspeciales?.[codigo];
     const horas = tipoConfig ? (parseFloat(tipoConfig.horas) || 0) : 0;
+    const esDiaNoHabil = esDomingo || Boolean(contexto.esFestivo);
 
     switch (comportamiento) {
-      case "cubre_deuda": return { ajusteAcumulador: 0,      ajusteTope: 0, horasCubreDeuda: horas };
-      case "resta":       return { ajusteAcumulador: -horas, ajusteTope: 0, horasCubreDeuda: 0 };
-      case "reduce_tope": return { ajusteAcumulador: 0,      ajusteTope: esDomingo ? 0 : -horas, horasCubreDeuda: 0 };
-      default:            return { ajusteAcumulador: 0,      ajusteTope: 0, horasCubreDeuda: 0 };
+      case "suma_tope": {
+        // Domingo y festivo nunca aportan. Sin turno real en la semana tampoco.
+        const cuenta = !esDiaNoHabil && contexto.semanaConTurnoReal !== false;
+        const reconocidas = cuenta ? horas : 0;
+        return {
+          ajusteAcumulador: reconocidas,
+          ajusteTope: 0,
+          horasCubreDeuda: esDiaNoHabil ? 0 : horas,
+          horasReconocidas: reconocidas,
+        };
+      }
+      case "cubre_deuda":
+        return { ajusteAcumulador: 0, ajusteTope: 0, horasCubreDeuda: esDiaNoHabil ? 0 : horas, horasReconocidas: 0 };
+      case "resta":
+        return { ajusteAcumulador: -horas, ajusteTope: 0, horasCubreDeuda: 0, horasReconocidas: 0 };
+      case "reduce_tope":
+        return { ajusteAcumulador: 0, ajusteTope: esDomingo ? 0 : -horas, horasCubreDeuda: 0, horasReconocidas: 0 };
+      default:
+        return { ajusteAcumulador: 0, ajusteTope: 0, horasCubreDeuda: 0, horasReconocidas: 0 };
     }
   }
 
+  /**
+   * Turno asignado a un día. Lo que está en pantalla manda; si el selector no existe
+   * (por ejemplo al restaurar o en pruebas) se usa lo guardado.
+   */
   _obtenerTurnoAsignadoParaDia(empleado, semanaNumero, indexDia, fechaDia) {
-    const fechaKey = fechaDia.toISOString().split("T")[0];
-    const turnoGuardado = empleado.turnosGuardados.get(fechaKey);
+    const fechaKey = this._fechaKey(fechaDia);
+    const turnoGuardado = empleado.turnosGuardados.get(fechaKey) || null;
+
+    const selector = typeof document !== "undefined" && document.querySelector
+      ? document.querySelector(
+          `[data-empleado="${empleado.documento}"][data-semana="${semanaNumero}"][data-dia="${indexDia}"]`
+        )
+      : null;
+    if (selector && selector.value) {
+      const coincide = turnoGuardado && turnoGuardado.turno === selector.value;
+      return { turno: selector.value, turnoGuardado: coincide ? turnoGuardado : null };
+    }
+
     if (turnoGuardado && turnoGuardado.turno) {
       return { turno: turnoGuardado.turno, turnoGuardado };
     }
-
-    const selector = document.querySelector(
-      `[data-empleado="${empleado.documento}"][data-semana="${semanaNumero}"][data-dia="${indexDia}"]`
-    );
-    const turno = selector ? selector.value : null;
-    return { turno, turnoGuardado: null };
+    return { turno: null, turnoGuardado: null };
   }
 
   guardarConfiguracion() {
+    this._aplicarColoresFijos(this.configuracion);
     localStorage.setItem(
       "configuracionTurnos",
       JSON.stringify(this.configuracion)
@@ -814,13 +926,15 @@ class SistemaTurnosMejorado {
                 <input type="text" class="shift-title-input" data-codigo="${turno.codigo}" value="${turno.nombre}" style="font-weight: 600; font-size: 1.1rem; border: none; border-bottom: 1px solid #ccc; background: transparent; padding: 2px 5px; width: 100px;" placeholder="Nombre">
                 <input type="text" class="shift-code-input" data-codigo="${turno.codigo}" value="${turno.codigo}" style="font-size: 0.9rem; border: 1px solid #ccc; background: white; padding: 2px 5px; width: 45px; border-radius: 4px; text-align: center;" placeholder="Cód" title="Código UI (1-3 letras)" ${['D','N','24T'].includes(turno.codigo) ? 'readonly' : ''}>
             </div>
-            <div style="display: flex; gap: 5px;">
-                <button class="action-btn-small toggle-shift-btn" data-codigo="${turno.codigo}" title="${turno.activo ? 'Desactivar' : 'Activar'}" style="background:transparent; border:none; cursor:pointer; font-size: 1.2rem; opacity: ${turno.activo ? '1' : '0.5'};">
+            <div style="display: flex; gap: 5px; align-items: center;">
+                ${SistemaTurnosMejorado.TURNOS_PROTEGIDOS.includes(turno.codigo)
+                  ? '<span class="shift-protegido" title="Turno base del sistema: no se puede eliminar">🔒 Base</span>'
+                  : `<button class="action-btn-small toggle-shift-btn" data-codigo="${turno.codigo}" title="${turno.activo ? 'Desactivar' : 'Activar'}" style="background:transparent; border:none; cursor:pointer; font-size: 1.2rem; opacity: ${turno.activo ? '1' : '0.5'};">
                     ${turno.activo ? '✅' : '❌'}
                 </button>
-                <button class="action-btn-small delete-shift-btn" data-codigo="${turno.codigo}" title="Eliminar Turno" style="background:transparent; border:none; cursor:pointer; font-size: 1.2rem;">
+                <button class="action-btn-small delete-shift-btn" data-codigo="${turno.codigo}" title="Eliminar turno" aria-label="Eliminar turno ${turno.nombre}">
                     🗑️
-                </button>
+                </button>`}
             </div>
         </div>
         <div class="shift-times">
@@ -875,16 +989,20 @@ class SistemaTurnosMejorado {
         activo: true,
         descripcion: ""
     };
-    
+
+    this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
     this.guardarConfiguracion();
     this.actualizarTiposTurno();
     this.generarTarjetasTurnosDinamicos();
+    this._refrescarProgramacion();
   }
 
   actualizarTurnoDinamico(element) {
     const oldCodigo = element.dataset.codigo;
     const turno = this.configuracion.turnosDinamicos[oldCodigo];
     if (!turno) return;
+    // Conservar lo que está en pantalla antes de cambiar la configuración del turno
+    this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
 
     if (element.classList.contains('shift-title-input')) turno.nombre = element.value;
     if (element.classList.contains('shift-color-picker')) turno.color = element.value;
@@ -904,6 +1022,7 @@ class SistemaTurnosMejorado {
             turno.codigo = newCodigo;
             this.configuracion.turnosDinamicos[newCodigo] = turno;
             delete this.configuracion.turnosDinamicos[oldCodigo];
+            this._reemplazarReferenciasTurno(oldCodigo, newCodigo);
         }
     }
 
@@ -912,33 +1031,82 @@ class SistemaTurnosMejorado {
     if (element.classList.contains('shift-code-input')) {
         this.generarTarjetasTurnosDinamicos();
     }
+    this._refrescarProgramacion();
   }
 
   toggleTurnoDinamico(codigo) {
-    if (['D', 'N', '24T'].includes(codigo)) {
+    if (SistemaTurnosMejorado.TURNOS_PROTEGIDOS.includes(codigo)) {
         alert("Los turnos base de sistema no pueden ser desactivados, solo modificados. (Si no los usas, puedes cambiar su color o nombre)");
         return;
     }
     const turno = this.configuracion.turnosDinamicos[codigo];
     if (turno) {
+        this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
         turno.activo = !turno.activo;
         this.guardarConfiguracion();
         this.actualizarTiposTurno();
         this.generarTarjetasTurnosDinamicos();
+        this._refrescarProgramacion();
     }
   }
 
-  eliminarTurnoDinamico(codigo) {
-    if (['D', 'N', '24T'].includes(codigo)) {
+  eliminarTurnoDinamico(codigo, { confirmar = true } = {}) {
+    if (SistemaTurnosMejorado.TURNOS_PROTEGIDOS.includes(codigo)) {
         alert("Los turnos base de sistema no pueden ser eliminados para preservar compatibilidad con registros antiguos. Puedes modificar su inicio/fin.");
-        return;
+        return false;
     }
-    if (confirm(`¿Estás seguro de eliminar el turno '${this.configuracion.turnosDinamicos[codigo].nombre}'? Los días ya guardados con este turno lo perderán.`)) {
-        delete this.configuracion.turnosDinamicos[codigo];
-        this.guardarConfiguracion();
-        this.actualizarTiposTurno();
-        this.generarTarjetasTurnosDinamicos();
+    const turno = this.configuracion.turnosDinamicos[codigo];
+    if (!turno) return false;
+
+    // Conservar lo que está en pantalla antes de contar y limpiar referencias
+    this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
+    const usos = this._contarUsosTurno(codigo);
+    const detalleUsos = usos > 0
+      ? `\n\nEstá asignado en ${usos} día(s) de la programación actual; esos días quedarán como "Libre".`
+      : "";
+    if (confirmar && !confirm(`¿Eliminar definitivamente el turno '${turno.nombre}' (${codigo})?${detalleUsos}`)) {
+      return false;
     }
+
+    delete this.configuracion.turnosDinamicos[codigo];
+    this.guardarConfiguracion();
+    this.actualizarTiposTurno();
+    this.generarTarjetasTurnosDinamicos();
+    this._reemplazarReferenciasTurno(codigo, null);
+    this._refrescarProgramacion();
+    return true;
+  }
+
+  _contarUsosTurno(codigo) {
+    let usos = 0;
+    this.empleados.forEach((emp) => {
+      emp.turnosGuardados.forEach((data) => { if (data.turno === codigo) usos++; });
+    });
+    return usos;
+  }
+
+  /**
+   * Renombra (nuevoCodigo) o elimina (nuevoCodigo = null) un código de turno en toda la programación.
+   */
+  _reemplazarReferenciasTurno(codigo, nuevoCodigo) {
+    this.empleados.forEach((emp) => {
+      emp.turnosGuardados.forEach((data, fechaKey) => {
+        if (data.turno !== codigo) return;
+        if (nuevoCodigo) data.turno = nuevoCodigo;
+        else emp.turnosGuardados.delete(fechaKey);
+      });
+      emp.resultados = null;
+    });
+  }
+
+  /**
+   * Redibuja la programación (selectores incluidos) con los turnos vigentes y la persiste.
+   */
+  _refrescarProgramacion() {
+    if (this.empleados.size === 0) return;
+    const contenedor = typeof document !== "undefined" ? document.getElementById("contenedor-semanas") : null;
+    if (contenedor && contenedor.children.length) this.mostrarFormularioTurnos();
+    this.guardarEstadoProgramacion();
   }
 
   generarTarjetasTiposTurnoEspeciales() {
@@ -956,6 +1124,7 @@ class SistemaTurnosMejorado {
         continue;
       }
 
+      const colorFijo = this._esConceptoConColorFijo(codigo);
       const tarjeta = document.createElement("div");
       tarjeta.className = "config-card config-payroll-card";
       tarjeta.style.setProperty("--concept-color", tipo.color || "#9e9e9e");
@@ -973,17 +1142,17 @@ class SistemaTurnosMejorado {
           </div>
           <div class="config-input-group">
             <label for="config-horas-${codigo}" class="config-label">Horas Equivalentes</label>
-            <p class="config-input-help">Cantidad de horas que sumará este concepto.</p>
-            <input type="number" id="config-horas-${codigo}" class="config-input-especial" value="${tipo.horas}" data-codigo="${codigo}" data-prop="horas" step="0.5">
+            <p class="config-input-help">${this._describirReglaConcepto(codigo)}</p>
+            <input type="number" id="config-horas-${codigo}" class="config-input-especial" value="${tipo.horas}" data-codigo="${codigo}" data-prop="horas" step="0.01" min="0">
           </div>
           <div class="config-input-group">
             <label for="config-color-${codigo}" class="config-label">Color</label>
-            <p class="config-input-help">Color usado para identificarlo visualmente.</p>
+            <p class="config-input-help">${colorFijo ? "Color identificativo fijo del sistema." : "Color usado para identificarlo visualmente."}</p>
             <div class="config-color-preview-row">
               <span class="config-color-swatch" style="background: ${tipo.color || '#9e9e9e'}" aria-hidden="true"></span>
               <span class="config-color-value">${tipo.color || '#9e9e9e'}</span>
             </div>
-            <input type="color" id="config-color-${codigo}" class="config-input-especial config-input-color" value="${tipo.color || '#9e9e9e'}" data-codigo="${codigo}" data-prop="color">
+            <input type="color" id="config-color-${codigo}" class="config-input-especial config-input-color" value="${tipo.color || '#9e9e9e'}" data-codigo="${codigo}" data-prop="color"${colorFijo ? ' disabled title="Color fijo del sistema"' : ''}>
           </div>
         </div>
       `;
@@ -1234,12 +1403,18 @@ class SistemaTurnosMejorado {
       container.addEventListener("click", (e) => {
         if (e.target.classList.contains("btn-delete-tipo-turno")) {
           const codigo = e.target.dataset.codigo;
+          if (this._esConceptoConColorFijo(codigo)) {
+            alert(`El concepto "${codigo}" es un concepto base del sistema y no se puede eliminar.`);
+            return;
+          }
           if (
             confirm(
               `¿Estás seguro de que quieres eliminar el concepto "${codigo}"?`
             )
           ) {
             delete this.configuracion.tiposTurnoEspeciales[codigo];
+            this.guardarConfiguracion();
+            this.actualizarTiposTurno();
             this.generarTarjetasTiposTurnoEspeciales();
           }
         }
@@ -1284,8 +1459,11 @@ class SistemaTurnosMejorado {
       nombre: nombre.trim(),
       horas: horasFloat,
       descripcion: nombre.trim(),
+      color: "#7E57C2",
     };
 
+    this.guardarConfiguracion();
+    this.actualizarTiposTurno();
     this.generarTarjetasTiposTurnoEspeciales();
   }
 
@@ -1306,19 +1484,10 @@ class SistemaTurnosMejorado {
         extraNocturna: { porcentaje: 75 },
         extraDiurnaFestiva: { porcentaje: 115 },
         extraNocturnaFestiva: { porcentaje: 165 },
-        tiposTurnoEspeciales: {
-          I: { nombre: "Incapacitado", horas: 7, descripcion: "Incapacidad", color: "#42A5F5" },
-          SC: { nombre: "Sin contrato", horas: 7, descripcion: "Sin contrato", color: "#90A4AE" },
-          PR: {
-            nombre: "Permiso remunerado",
-            horas: 7,
-            descripcion: "Permiso remunerado",
-            color: "#66BB6A"
-          },
-          A: { nombre: "Ausencia", horas: 7, descripcion: "Ausencia", color: "#EF5350" },
-          V: { nombre: "Vacaciones", horas: 7, descripcion: "Vacaciones", color: "#2E7D32" },
-        },
-        versionConceptos: 2,
+        tiposTurnoEspeciales: this._conceptosPorDefecto(),
+        versionConceptos: 3,
+        // Se conservan los turnos dinámicos: restaurar solo afecta recargos y conceptos
+        turnosDinamicos: this.configuracion.turnosDinamicos,
         codigoExportacion: {
           horasExtrasDiurnas: "045",
           horasExtrasNocturnas: "046",
@@ -1330,6 +1499,10 @@ class SistemaTurnosMejorado {
         },
       };
       this.guardarConfiguracion();
+      this.actualizarTiposTurno();
+      this.generarTarjetasRecargos();
+      this.generarTarjetasExtras();
+      this.generarTarjetasTiposTurnoEspeciales();
 
       // Mostrar notificación de éxito
       this.mostrarNotificacion(
@@ -1500,42 +1673,6 @@ class SistemaTurnosMejorado {
     }, 3000);
   }
 
-obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
-  let horas = 0;
-
-  semana.dias.forEach(dia => {
-    const fechaKey = dia.fecha.toISOString().split('T')[0];
-
-    // 1️⃣ Turno guardado (persistente)
-    if (empleado.turnosGuardados.has(fechaKey)) {
-      const turnoData = empleado.turnosGuardados.get(fechaKey);
-      const tipo = turnoData.turno;
-
-      if (this.tiposTurno[tipo]) {
-        horas += this.tiposTurno[tipo].horas;
-      }
-    }
-
-    // 2️⃣ Turno visible en pantalla (aunque esté fuera del rango)
-    else {
-      const selector = document.querySelector(
-        `[data-empleado="${empleado.documento}"][data-fecha="${fechaKey}"]`
-      );
-
-      if (selector && selector.value && selector.value !== "C") {
-        const tipo = selector.value;
-        if (this.tiposTurno[tipo]) {
-          horas += this.tiposTurno[tipo].horas;
-        }
-      }
-    }
-  });
-
-  return horas;
-}
-
-
-
   _formatarNombreConfig(key) {
     const nombres = {
       recargoNocturno: "Recargo Nocturno",
@@ -1655,6 +1792,48 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         e.target.value = new Intl.NumberFormat('es-CO').format(value);
     });
 
+    // Documento: solo números (sin letras, espacios ni caracteres especiales; conserva ceros iniciales)
+    const inputDocumento = document.getElementById('modal-documento');
+    if (inputDocumento) {
+      inputDocumento.addEventListener('input', (e) => {
+        const limpio = this.normalizarDocumento(e.target.value);
+        if (limpio !== e.target.value) {
+          e.target.value = limpio;
+          this._mostrarErrorDocumento('El documento solo admite números.');
+        } else {
+          this._mostrarErrorDocumento('');
+        }
+      });
+      inputDocumento.addEventListener('keydown', (e) => {
+        if (e.key.length === 1 && !/\d/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this._mostrarErrorDocumento('El documento solo admite números.');
+        }
+      });
+    }
+
+    // Marcar cambios sin guardar en la programación
+    const contenedorSemanas = document.getElementById('contenedor-semanas');
+    if (contenedorSemanas) {
+      const marcar = (e) => {
+        const selector = e.target.closest('.selector-turno') ||
+          e.target.closest('.dia-turno')?.querySelector('.selector-turno');
+        if (selector) this._marcarCambiosSinGuardar(selector.dataset.empleado);
+      };
+      contenedorSemanas.addEventListener('change', marcar);
+    }
+
+    // Protección contra pérdida accidental de información
+    window.addEventListener('beforeunload', (e) => {
+      const hayPendientes = Array.from(this.empleados.values()).some((emp) => emp.cambiosSinGuardar);
+      if (hayPendientes) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    this._mostrarAvisoProgramacionGuardada();
+
     // Cerrar modal al hacer clic fuera - DESACTIVADO
     /*
     document.getElementById('modal-agregar-empleado').addEventListener('click', (e) => {
@@ -1678,13 +1857,78 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     window.scrollTo(0, 0);
   }
 
+  /**
+   * Acceso al módulo de configuración con contraseña.
+   * Una vez autorizada, la sesión del navegador no vuelve a pedirla.
+   * Nota: es una validación solo de frontend; no es seguridad real.
+   */
   solicitarContraseñaParaConfig() {
-    const password = prompt("Por favor, ingrese la contraseña para acceder a la configuración:");
-    if (password === "Alejostone13") {
+    if (this._configAutorizada()) {
       this.navegarA("seccion-sistema-configuracion");
-    } else if (password !== null) {
-      alert("Contraseña incorrecta.");
+      return;
     }
+
+    const modal = document.getElementById("modal-clave-config");
+    const input = document.getElementById("input-clave-config");
+    const error = document.getElementById("error-clave-config");
+    if (!modal || !input) return;
+
+    input.value = "";
+    error.textContent = "";
+    modal.style.display = "flex";
+    setTimeout(() => input.focus(), 50);
+
+    const cerrar = () => {
+      modal.style.display = "none";
+      btnEntrar.removeEventListener("click", validar);
+      btnCancelar.removeEventListener("click", cerrar);
+      input.removeEventListener("keydown", onKey);
+    };
+    const validar = () => {
+      if (this.validarClaveConfiguracion(input.value)) {
+        try { sessionStorage.setItem("configAutorizada", "1"); } catch (e) {}
+        this._configAutorizadaMemoria = true;
+        cerrar();
+        this.navegarA("seccion-sistema-configuracion");
+      } else {
+        error.textContent = input.value ? "Contraseña incorrecta. Inténtelo de nuevo." : "Ingrese la contraseña.";
+        input.select();
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === "Enter") validar();
+      if (e.key === "Escape") cerrar();
+    };
+    const btnEntrar = document.getElementById("btn-entrar-clave-config");
+    const btnCancelar = document.getElementById("btn-cancelar-clave-config");
+    btnEntrar.addEventListener("click", validar);
+    btnCancelar.addEventListener("click", cerrar);
+    input.addEventListener("keydown", onKey);
+  }
+
+  validarClaveConfiguracion(valor) {
+    return valor === SistemaTurnosMejorado.CLAVE_CONFIGURACION;
+  }
+
+  _configAutorizada() {
+    if (this._configAutorizadaMemoria) return true;
+    try { return sessionStorage.getItem("configAutorizada") === "1"; } catch (e) { return false; }
+  }
+
+  /**
+   * Deja solo dígitos en un documento (sin espacios, letras ni símbolos). Conserva ceros iniciales.
+   */
+  normalizarDocumento(valor) {
+    return String(valor || "").replace(/\D/g, "");
+  }
+
+  esDocumentoValido(valor) {
+    return /^\d+$/.test(String(valor || ""));
+  }
+
+  _mostrarErrorDocumento(mensaje) {
+    const el = document.getElementById("error-documento");
+    if (el) el.textContent = mensaje;
   }
 
   /**
@@ -1803,12 +2047,8 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1); // Primer día del mes actual.
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0); // Último día del mes actual.
 
-    document.getElementById("fecha-inicio").value = inicioMes
-      .toISOString()
-      .split("T")[0];
-    document.getElementById("fecha-fin").value = finMes
-      .toISOString()
-      .split("T")[0];
+    document.getElementById("fecha-inicio").value = this._fechaKey(inicioMes);
+    document.getElementById("fecha-fin").value = this._fechaKey(finMes);
 
     // Mostrar día de la semana para fechas iniciales
     this.mostrarDiaSemana(
@@ -1897,14 +2137,34 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       return;
     }
 
+    // Si ya hay una programación, no se pierde sin confirmación
+    let conservarProgramacion = false;
+    if (this.empleados.size > 0) {
+      conservarProgramacion = !confirm(
+        `Ya existe una programación con ${this.empleados.size} empleado(s).\n\n` +
+        `Aceptar: descartarla e iniciar un período nuevo.\n` +
+        `Cancelar: volver a la programación actual (se aplican los cambios de alimentación y turnos).`
+      );
+    }
+
+    // Obtiene la configuración de almuerzo ACTUAL del formulario (no la de un cálculo anterior)
+    this.configuracionAlmuerzo = null;
+    const configuracionAlmuerzo = this.obtenerConfiguracionAlmuerzo();
+    this.configuracionAlmuerzo = configuracionAlmuerzo;
+    this.actualizarTiposTurno();
+
+    if (conservarProgramacion) {
+      this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
+      this.mostrarFormularioTurnos();
+      this.guardarEstadoProgramacion();
+      this.navegarA("seccion-turnos");
+      return;
+    }
+
     // Obtener el número de empleados definido
     const numeroEmpleadosDefinido = parseInt(document.getElementById("numero-empleados").value) || 1;
     this.numeroEmpleadosDefinido = numeroEmpleadosDefinido;
     this.empleadosAgregados = 0;
-
-    // Obtiene la configuración de almuerzo
-    const configuracionAlmuerzo = this.obtenerConfiguracionAlmuerzo();
-    this.configuracionAlmuerzo = configuracionAlmuerzo;
 
     // Función auxiliar para formatear la hora en formato am/pm.
     const formatTime = (timeStr) => {
@@ -1934,22 +2194,17 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         });
     }
 
-    // Limpiar empleados anteriores
+    // Limpiar empleados anteriores (y la programación guardada)
     this.empleados.clear();
+    this.filtroResultados = null;
+    this.borrarEstadoProgramacion();
+    this._ocultarAvisoProgramacionGuardada();
 
     // Siempre abrir el modal para ingresar empleados
     this.abrirModalEmpleado();
 
     this.mostrarFormularioTurnos();
     this.navegarA("seccion-turnos");
-
-    // Ajusta la fecha de fin para que siempre termine en sábado, completando la última semana.
-    const finAjustado = new Date(fin);
-    while (finAjustado.getDay() !== 6) {
-      finAjustado.setDate(finAjustado.getDate() + 1);
-    }
-
-    // Genera la estructura de semanas y días.
   }
   /**
    * Genera las semanas del período empezando desde la fecha de inicio seleccionada
@@ -2070,21 +2325,40 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
   }
 
   agregarEmpleadoDesdeModal() {
-    const documento = document.getElementById('modal-documento').value.trim();
+    const documentoBruto = document.getElementById('modal-documento').value;
+    const documento = this.normalizarDocumento(documentoBruto);
     const nombre = document.getElementById('modal-nombre').value.trim();
     const salarioStr = document.getElementById('modal-salario').value.replace(/\D/g, '');
     const salario = parseFloat(salarioStr) || 0;
     const fechaInicio = document.getElementById('modal-fecha-inicio').value;
     const fechaFin = document.getElementById('modal-fecha-fin').value;
 
+    if (!this.esDocumentoValido(documentoBruto.trim())) {
+        this._mostrarErrorDocumento(documentoBruto.trim()
+          ? 'El documento solo puede contener números.'
+          : 'El documento es obligatorio.');
+        document.getElementById('modal-documento').focus();
+        return;
+    }
+
     if (!documento || !nombre || !salario || !fechaInicio || !fechaFin) {
         alert('Todos los campos son obligatorios.');
         return;
     }
 
+    if (fechaInicio > fechaFin) {
+        alert('La fecha de inicio del empleado debe ser anterior o igual a la fecha de fin.');
+        return;
+    }
+
+    // Conservar lo que ya está programado en pantalla antes de redibujar
+    this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
+
     if (this.agregarEmpleado(documento, nombre, salario, fechaInicio, fechaFin)) {
         this.empleadosAgregados++;
+        this._mostrarErrorDocumento('');
         this.mostrarFormularioTurnos(); // Redibuja toda la sección
+        this.guardarEstadoProgramacion();
         document.getElementById('modal-agregar-empleado').style.display = 'none';
         // Limpiar modal
         document.getElementById('modal-documento').value = '';
@@ -2150,37 +2424,15 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         return;
     }
 
-    // CRÍTICO: Guardar los turnos existentes ANTES de regenerar las semanas
-    // Esto preserva toda la información ya ingresada
-    const turnosGuardadosBackup = new Map(empleado.turnosGuardados);
+    if (fechaInicio > fechaFin) {
+        alert('La fecha de inicio del empleado debe ser anterior o igual a la fecha de fin.');
+        return;
+    }
 
-    // Además, guardar los turnos actuales del DOM que aún no se han pre-guardado
-    empleado.semanas.forEach(semana => {
-      semana.dias.forEach((dia, index) => {
-        if (dia.enRango) {
-          const selector = document.querySelector(
-            `[data-empleado="${empleado.documento}"][data-semana="${semana.numero}"][data-dia="${index}"]`
-          );
-          if (selector && selector.value && selector.value !== "C") {
-            const fechaKey = dia.fecha.toISOString().split('T')[0];
-            // Solo guardar si no existe ya en turnosGuardados (para no sobrescribir datos pre-guardados)
-            if (!turnosGuardadosBackup.has(fechaKey)) {
-              const turnoData = { turno: selector.value };
-              if (selector.value === "M") {
-                const manualInputs = document.querySelector(
-                  `#manual-time-${empleado.documento}-${semana.numero}-${index}`
-                );
-                if (manualInputs) {
-                  turnoData.inicioManual = manualInputs.querySelector(".manual-inicio").value;
-                  turnoData.finManual = manualInputs.querySelector(".manual-fin").value;
-                }
-              }
-              turnosGuardadosBackup.set(fechaKey, turnoData);
-            }
-          }
-        }
-      });
-    });
+    // CRÍTICO: conservar todo lo programado (incluido lo que está en pantalla sin pre-guardar)
+    // antes de regenerar las semanas
+    this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
+    const turnosGuardadosBackup = new Map(empleado.turnosGuardados);
 
     // Actualizar datos básicos del empleado
     empleado.nombre = nombre;
@@ -2203,6 +2455,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     }
 
     this.mostrarFormularioTurnos(); // Redraw the entire section
+    this.guardarEstadoProgramacion();
     document.getElementById('modal-agregar-empleado').style.display = 'none';
 
     // Restore the modal to its original state for adding new employees
@@ -2277,7 +2530,8 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         const color = tipo.color || (this.configuracion.turnosDinamicos && this.configuracion.turnosDinamicos[codigo] && this.configuracion.turnosDinamicos[codigo].color) || "#9e9e9e";
         const texto = `${codigo} - ${this.formatearNombreYHorarioTexto(codigo)}`.trim();
         const selectedAttr = codigo === 'C' ? ' selected' : '';
-        return `<option value="${codigo}" data-color="${color}"${selectedAttr}>◼ ${texto}</option>`;
+        const grupo = this.configuracion.tiposTurnoEspeciales?.[codigo] ? 'concepto' : 'turno';
+        return `<option value="${codigo}" data-color="${color}" data-grupo="${grupo}"${selectedAttr}>${texto}</option>`;
       })
       .join("");
 
@@ -2337,12 +2591,21 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
             bodyEmpleado.appendChild(divSemana);
         }); // Fin forEach semana
 
-        // Botón individual de Pre-guardar para este empleado
-        const btnPreGuardarIndividual = document.createElement("button");
-        btnPreGuardarIndividual.className = "btn-pre-guardar-individual";
-        btnPreGuardarIndividual.textContent = `💾 Pre-guardar Turnos de ${empleado.nombre}`;
-        btnPreGuardarIndividual.addEventListener("click", () => this.preGuardarTurnosEmpleado(empleado.documento));
-        bodyEmpleado.appendChild(btnPreGuardarIndividual);
+        // Acciones individuales: pre-guardar y ver resultados solo de este empleado
+        const acciones = document.createElement("div");
+        acciones.className = "empleado-acciones";
+        acciones.innerHTML = `
+            <span class="estado-guardado" id="estado-guardado-${empleado.documento}"></span>
+            <div class="empleado-acciones-botones">
+                <button type="button" class="btn-pre-guardar-individual">💾 Pre-guardar</button>
+                <button type="button" class="btn-ver-resultados-individual">📊 Ver resultados de ${this._escaparHTML(empleado.nombre)}</button>
+            </div>
+        `;
+        acciones.querySelector(".btn-pre-guardar-individual")
+          .addEventListener("click", () => this.preGuardarTurnosEmpleado(empleado.documento));
+        acciones.querySelector(".btn-ver-resultados-individual")
+          .addEventListener("click", () => this.verResultadosEmpleado(empleado.documento));
+        bodyEmpleado.appendChild(acciones);
 
         // Evento para colapsar/expandir
         const header = seccionEmpleado.querySelector('.empleado-header');
@@ -2366,36 +2629,35 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     // Inicializar reemplazo visual personalizado para selects (lista coloreada)
     this.inicializarCustomSelects();
 
-    // Set the values for pre-saved data from turnosGuardados
+    // Restaurar en pantalla lo guardado (todos los días de la semana, también los fuera de rango)
     this.empleados.forEach(empleado => {
       empleado.semanas.forEach((semana) => {
         semana.dias.forEach((dia, index) => {
-          if (dia.enRango) {
-            const fechaKey = dia.fecha.toISOString().split('T')[0];
-            const turnoGuardado = empleado.turnosGuardados.get(fechaKey);
-            const selector = document.querySelector(
-              `[data-empleado="${empleado.documento}"][data-semana="${semana.numero}"][data-dia="${index}"]`
-            );
-            if (selector && turnoGuardado) {
-              selector.value = turnoGuardado.turno;
-              // Notificar cambio para que tanto estilos como el custom-select se actualicen
-              selector.dispatchEvent(new Event('change'));
-              this.gestionarVisibilidadManual(selector);
-              if (turnoGuardado.turno === 'M') {
-                const manualInputs = document.querySelector(
-                  `#manual-time-${empleado.documento}-${semana.numero}-${index}`
-                );
-                if (manualInputs) {
-                  manualInputs.querySelector('.manual-inicio').value = turnoGuardado.inicioManual || '07:00';
-                  manualInputs.querySelector('.manual-fin').value = turnoGuardado.finManual || '19:00';
-                }
+          const fechaKey = this._fechaKey(dia.fecha);
+          const turnoGuardado = empleado.turnosGuardados.get(fechaKey);
+          const selector = document.querySelector(
+            `[data-empleado="${empleado.documento}"][data-semana="${semana.numero}"][data-dia="${index}"]`
+          );
+          // Un turno que ya no existe (p. ej. eliminado) no se restaura
+          if (selector && turnoGuardado && this.tiposTurno[turnoGuardado.turno]) {
+            if (turnoGuardado.turno === 'M') {
+              const manualInputs = document.querySelector(
+                `#manual-time-${empleado.documento}-${semana.numero}-${index}`
+              );
+              if (manualInputs) {
+                manualInputs.querySelector('.manual-inicio').value = turnoGuardado.inicioManual || '07:00';
+                manualInputs.querySelector('.manual-fin').value = turnoGuardado.finManual || '19:00';
               }
             }
+            selector.value = turnoGuardado.turno;
+            // Notificar cambio para que tanto estilos como el selector visual se actualicen
+            selector.dispatchEvent(new CustomEvent('change', { detail: { restauracion: true } }));
+            this.gestionarVisibilidadManual(selector);
           }
         });
       });
+      this._actualizarEstadoGuardado(empleado);
     });
-
   }
   // Muestra u oculta los campos de hora para el turno "Manual".
   gestionarVisibilidadManual(selector) {
@@ -2432,21 +2694,27 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
 
       const preGuardado = empleado.preGuardado || false;
 
-      if (preGuardado) {
+      if (preGuardado && !empleado.cambiosSinGuardar) {
         itemEmpleado.classList.add("empleado-pre-guardado");
       } else {
         itemEmpleado.classList.add(tieneTurnos ? "empleado-con-turnos" : "empleado-sin-turnos");
       }
 
+      const estado = empleado.cambiosSinGuardar
+        ? "✏️ Cambios sin guardar"
+        : (preGuardado ? "💾 Pre-guardado" : (tieneTurnos ? "✅ Turnos Asignados" : "⏳ Sin Turnos"));
+
       itemEmpleado.innerHTML = `
-        <span class="empleado-nombre">${empleado.nombre}</span>
+        <span class="empleado-nombre">${this._escaparHTML(empleado.nombre)}</span>
         <span class="empleado-documento">(${empleado.documento})</span>
         <div class="empleado-fechas">
             <span class="fecha">Inicio: ${empleado.fechaInicio}</span>
             <span class="fecha">Fin: ${empleado.fechaFin}</span>
         </div>
-        <span class="estado-turnos">${preGuardado ? "💾 Pre-guardado" : (tieneTurnos ? "✅ Turnos Asignados" : "⏳ Sin Turnos")}</span>
-        <button class="btn-editar-empleado" data-documento="${empleado.documento}">✏️</button>
+        <span class="estado-turnos">${estado}</span>
+        <button class="btn-ver-resultados-lista" data-documento="${empleado.documento}" title="Ver resultados de este empleado">📊</button>
+        <button class="btn-editar-empleado" data-documento="${empleado.documento}" title="Editar empleado">✏️</button>
+        <button class="btn-eliminar-empleado" data-documento="${empleado.documento}" title="Eliminar empleado">🗑️</button>
       `;
 
       contenedorLista.appendChild(itemEmpleado);
@@ -2455,45 +2723,291 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         const documento = e.currentTarget.dataset.documento;
         this.abrirModalEditarEmpleado(documento);
       });
+      itemEmpleado.querySelector('.btn-ver-resultados-lista').addEventListener('click', (e) => {
+        this.verResultadosEmpleado(e.currentTarget.dataset.documento);
+      });
+      itemEmpleado.querySelector('.btn-eliminar-empleado').addEventListener('click', (e) => {
+        this.eliminarEmpleado(e.currentTarget.dataset.documento);
+      });
     });
   }
 
   /**
    * Pre-guarda los turnos actuales para un empleado específico
    */
-  preGuardarTurnosEmpleado(documentoEmpleado) {
-    const empleado = Array.from(this.empleados.values()).find(emp => emp.documento === documentoEmpleado);
-    if (!empleado) return;
+  preGuardarTurnosEmpleado(documentoEmpleado, { silencioso = false } = {}) {
+    const empleado = this.empleados.get(documentoEmpleado);
+    if (!empleado) return false;
 
-    empleado.semanas.forEach(semana => {
+    this._sincronizarTurnosDesdeDOM(empleado);
+    empleado.preGuardado = true;
+    empleado.cambiosSinGuardar = false;
+    empleado.guardadoEn = new Date().toISOString();
+
+    const ok = this.guardarEstadoProgramacion();
+    this.mostrarListaEmpleados(); // Actualizar la lista después de pre-guardar
+    this._actualizarEstadoGuardado(empleado);
+    if (!silencioso) {
+      this.mostrarNotificacion(
+        ok
+          ? `Turnos pre-guardados para ${empleado.nombre}`
+          : `No se pudo guardar en el navegador. Los turnos de ${empleado.nombre} solo quedan en esta sesión.`,
+        ok ? "success" : "info"
+      );
+    }
+    return ok;
+  }
+
+  /**
+   * Copia a `turnosGuardados` lo que está en pantalla para TODOS los días de las semanas
+   * del empleado (incluidos los días fuera de rango, que cuentan para el tope semanal).
+   */
+  _sincronizarTurnosDesdeDOM(empleado) {
+    if (typeof document === "undefined" || !document.querySelector) return;
+    empleado.semanas.forEach((semana) => {
       semana.dias.forEach((dia, index) => {
-        if (dia.enRango) {
-          const selector = document.querySelector(
-            `[data-empleado="${empleado.documento}"][data-semana="${semana.numero}"][data-dia="${index}"]`
-          );
-          if (selector && selector.value !== "") {
-            const fechaKey = dia.fecha.toISOString().split('T')[0]; // YYYY-MM-DD
-            const turnoData = { turno: selector.value };
-            if (selector.value === "M") {
-              const manualInputs = document.querySelector(
-                `#manual-time-${empleado.documento}-${semana.numero}-${index}`
-              );
-              if (manualInputs) {
-                turnoData.inicioManual = manualInputs.querySelector(".manual-inicio").value;
-                turnoData.finManual = manualInputs.querySelector(".manual-fin").value;
-              }
-            }
-            empleado.turnosGuardados.set(fechaKey, turnoData);
+        const selector = document.querySelector(
+          `[data-empleado="${empleado.documento}"][data-semana="${semana.numero}"][data-dia="${index}"]`
+        );
+        if (!selector || !selector.value) return;
+        const turnoData = { turno: selector.value };
+        if (selector.value === "M") {
+          const horario = this._obtenerHorarioManual(empleado, semana.numero, index, null);
+          if (horario) {
+            turnoData.inicioManual = horario.inicio;
+            turnoData.finManual = horario.fin;
           }
         }
+        empleado.turnosGuardados.set(this._fechaKey(dia.fecha), turnoData);
       });
     });
+  }
 
-    // Marcar empleado como pre-guardado
-    empleado.preGuardado = true;
+  _marcarCambiosSinGuardar(documento) {
+    const empleado = this.empleados.get(documento);
+    if (!empleado) return;
+    const yaMarcado = empleado.cambiosSinGuardar;
+    empleado.cambiosSinGuardar = true;
+    this._actualizarEstadoGuardado(empleado);
+    if (!yaMarcado) this.mostrarListaEmpleados();
+  }
 
-    this.mostrarListaEmpleados(); // Actualizar la lista después de pre-guardar
-    this.mostrarNotificacion(`Turnos pre-guardados para ${empleado.nombre}`, "success");
+  _actualizarEstadoGuardado(empleado) {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById(`estado-guardado-${empleado.documento}`);
+    if (!el) return;
+    if (empleado.cambiosSinGuardar) {
+      el.className = "estado-guardado estado-pendiente";
+      el.textContent = "● Cambios sin guardar";
+    } else if (empleado.preGuardado) {
+      const hora = empleado.guardadoEn
+        ? new Date(empleado.guardadoEn).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })
+        : "";
+      el.className = "estado-guardado estado-ok";
+      el.textContent = `✔ Guardado${hora ? ` (${hora})` : ""}`;
+    } else {
+      el.className = "estado-guardado";
+      el.textContent = "Sin guardar";
+    }
+  }
+
+  /**
+   * Elimina un empleado de la programación (y de lo guardado en el navegador).
+   */
+  eliminarEmpleado(documento, { confirmar = true } = {}) {
+    const empleado = this.empleados.get(documento);
+    if (!empleado) return false;
+    if (confirmar && !confirm(`¿Eliminar a ${empleado.nombre} (${documento}) y toda su programación?`)) return false;
+    this.empleados.forEach((emp) => this._sincronizarTurnosDesdeDOM(emp));
+    this.empleados.delete(documento);
+    if (this.filtroResultados) this.filtroResultados = this.filtroResultados.filter((d) => d !== documento);
+    this.empleadosAgregados = this.empleados.size;
+    this.mostrarFormularioTurnos();
+    this.guardarEstadoProgramacion();
+    this.mostrarNotificacion(`Empleado ${empleado.nombre} eliminado.`, "success");
+    return true;
+  }
+
+  /**
+   * Pre-guarda y muestra los resultados exclusivamente de un empleado.
+   */
+  verResultadosEmpleado(documento) {
+    if (!this.empleados.has(documento)) return;
+    this.preGuardarTurnosEmpleado(documento, { silencioso: true });
+    this.calcularTurnos([documento]);
+  }
+
+  _escaparHTML(texto) {
+    return String(texto ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // ─── Persistencia de la programación (localStorage) ────────────────────────
+
+  static get CLAVE_PROGRAMACION() {
+    return "programacionTurnos_v1";
+  }
+
+  /**
+   * Serializa período, alimentación y empleados con sus turnos (datos reales, no la vista).
+   */
+  serializarProgramacion() {
+    const leer = (id) => (typeof document !== "undefined" && document.getElementById(id)) ? document.getElementById(id).value : "";
+    return {
+      version: 1,
+      guardadoEn: new Date().toISOString(),
+      periodo: {
+        fechaInicio: leer("fecha-inicio"),
+        fechaFin: leer("fecha-fin"),
+        numeroEmpleados: this.numeroEmpleadosDefinido,
+        salario: leer("salario-mensual"),
+      },
+      almuerzo: this.configuracionAlmuerzo || null,
+      empleados: Array.from(this.empleados.values()).map((emp) => ({
+        documento: emp.documento,
+        nombre: emp.nombre,
+        salario: emp.salario,
+        fechaInicio: emp.fechaInicio,
+        fechaFin: emp.fechaFin,
+        preGuardado: Boolean(emp.preGuardado),
+        guardadoEn: emp.guardadoEn || null,
+        turnos: Object.fromEntries(emp.turnosGuardados),
+      })),
+    };
+  }
+
+  guardarEstadoProgramacion() {
+    try {
+      if (this.empleados.size === 0) {
+        localStorage.removeItem(SistemaTurnosMejorado.CLAVE_PROGRAMACION);
+        return true;
+      }
+      localStorage.setItem(
+        SistemaTurnosMejorado.CLAVE_PROGRAMACION,
+        JSON.stringify(this.serializarProgramacion())
+      );
+      return true;
+    } catch (e) {
+      console.error("No se pudo guardar la programación:", e);
+      return false;
+    }
+  }
+
+  leerEstadoProgramacion() {
+    try {
+      const crudo = localStorage.getItem(SistemaTurnosMejorado.CLAVE_PROGRAMACION);
+      if (!crudo) return null;
+      const datos = JSON.parse(crudo);
+      return datos && Array.isArray(datos.empleados) && datos.empleados.length ? datos : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  borrarEstadoProgramacion() {
+    try { localStorage.removeItem(SistemaTurnosMejorado.CLAVE_PROGRAMACION); } catch (e) {}
+  }
+
+  /**
+   * Reconstruye empleados y turnos desde un estado serializado (sin tocar la pantalla).
+   */
+  restaurarProgramacionDesdeDatos(datos) {
+    this.empleados.clear();
+    this.filtroResultados = null;
+    this.numeroEmpleadosDefinido = datos.periodo?.numeroEmpleados || datos.empleados.length;
+    if (datos.almuerzo) this.configuracionAlmuerzo = datos.almuerzo;
+    datos.empleados.forEach((e) => {
+      const documento = this.normalizarDocumento(e.documento);
+      if (!documento) return;
+      const inicio = new Date(`${e.fechaInicio}T00:00:00`);
+      const fin = new Date(`${e.fechaFin}T00:00:00`);
+      this.empleados.set(documento, {
+        documento,
+        nombre: e.nombre,
+        salario: Number(e.salario) || 0,
+        fechaInicio: e.fechaInicio,
+        fechaFin: e.fechaFin,
+        semanas: this.generarSemanas(inicio, fin),
+        resultados: null,
+        preGuardado: Boolean(e.preGuardado),
+        guardadoEn: e.guardadoEn || null,
+        cambiosSinGuardar: false,
+        turnosGuardados: new Map(Object.entries(e.turnos || {})),
+      });
+    });
+    this.empleadosAgregados = this.empleados.size;
+    return this.empleados.size;
+  }
+
+  /**
+   * Restaura en pantalla la programación guardada y abre la sección de turnos.
+   */
+  continuarProgramacionGuardada() {
+    const datos = this.leerEstadoProgramacion();
+    if (!datos) {
+      this._ocultarAvisoProgramacionGuardada();
+      return;
+    }
+    const p = datos.periodo || {};
+    if (p.fechaInicio) document.getElementById("fecha-inicio").value = p.fechaInicio;
+    if (p.fechaFin) document.getElementById("fecha-fin").value = p.fechaFin;
+    if (p.numeroEmpleados) document.getElementById("numero-empleados").value = p.numeroEmpleados;
+    if (p.salario) document.getElementById("salario-mensual").value = p.salario;
+    this.mostrarDiaSemana(document.getElementById("fecha-inicio").value, "dia-semana-inicio");
+    this.mostrarDiaSemana(document.getElementById("fecha-fin").value, "dia-semana-fin");
+    this._aplicarAlmuerzoEnFormulario(datos.almuerzo);
+
+    this.restaurarProgramacionDesdeDatos(datos);
+    this.actualizarTiposTurno();
+    this._ocultarAvisoProgramacionGuardada();
+    this.mostrarFormularioTurnos();
+    this.navegarA("seccion-turnos");
+    this.mostrarNotificacion(`Programación recuperada: ${this.empleados.size} empleado(s).`, "success");
+  }
+
+  _aplicarAlmuerzoEnFormulario(almuerzo) {
+    if (!almuerzo || typeof document === "undefined") return;
+    const radio = document.querySelector(`input[name="tipo-almuerzo"][value="${almuerzo.tipo}"]`);
+    if (radio) radio.checked = true;
+    if (almuerzo.tipo === "predefinido") {
+      const tiempo = document.querySelector(`input[name="tiempo-almuerzo"][value="${almuerzo.tiempoEnHoras}"]`);
+      if (tiempo) tiempo.checked = true;
+    }
+    if (almuerzo.tipo === "personalizado") {
+      if (almuerzo.inicio) document.getElementById("inicio-almuerzo").value = almuerzo.inicio;
+      if (almuerzo.fin) document.getElementById("fin-almuerzo").value = almuerzo.fin;
+    }
+    this.manejarTipoAlmuerzo(almuerzo.tipo);
+  }
+
+  _mostrarAvisoProgramacionGuardada() {
+    const aviso = document.getElementById("aviso-programacion-guardada");
+    const datos = this.leerEstadoProgramacion();
+    if (!aviso || !datos) return;
+    const p = datos.periodo || {};
+    const fecha = datos.guardadoEn
+      ? new Date(datos.guardadoEn).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })
+      : "";
+    const formato = (f) => f ? new Date(`${f}T00:00:00`).toLocaleDateString("es-CO") : "—";
+    aviso.querySelector(".aviso-detalle").textContent =
+      `${datos.empleados.length} empleado(s) · Período ${formato(p.fechaInicio)} – ${formato(p.fechaFin)}` +
+      (fecha ? ` · Guardada el ${fecha}` : "");
+    aviso.style.display = "flex";
+    aviso.querySelector(".btn-continuar-programacion").onclick = () => this.continuarProgramacionGuardada();
+    aviso.querySelector(".btn-descartar-programacion").onclick = () => {
+      if (confirm("¿Descartar la programación guardada? Esta acción no se puede deshacer.")) {
+        this.borrarEstadoProgramacion();
+        this._ocultarAvisoProgramacionGuardada();
+      }
+    };
+  }
+
+  _ocultarAvisoProgramacionGuardada() {
+    const aviso = typeof document !== "undefined" ? document.getElementById("aviso-programacion-guardada") : null;
+    if (aviso) aviso.style.display = "none";
   }
 
   /**
@@ -2713,14 +3227,13 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       return false;
     };
 
-    let minutosNocturnosDia1 = 0,
-      minutosDiurnosDia1 = 0;
-    let minutosNocturnosDia2 = 0,
-      minutosDiurnosDia2 = 0;
-
     const inicioNocturnoMin = timeToMinutes(inicioNocturnoStr);
     const finNocturnoMin = timeToMinutes(finNocturnoStr);
 
+    // Agrupar los minutos trabajados en tramos CRONOLÓGICOS de igual naturaleza
+    // (día del calendario + diurno/nocturno). Así, al cruzar el tope semanal, solo
+    // el tiempo posterior a ese instante exacto se clasifica como extra.
+    const tramos = [];
     for (let minuto = ctxTurno.inicioEfectivo; minuto < ctxTurno.finProgramado; minuto++) {
       // Saltar minutos de almuerzo usando ventanas absolutas (ajustadas)
       if (isInLunchAbs(minuto)) continue;
@@ -2732,67 +3245,28 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       } else {
         esNocturno = minutoDelDia >= inicioNocturnoMin || minutoDelDia < finNocturnoMin;
       }
-      if (minuto < 24 * 60) {
-        // Día 1
-        if (esNocturno) minutosNocturnosDia1++;
-        else minutosDiurnosDia1++;
+      const esDiaSiguiente = minuto >= 24 * 60;
+      const ultimo = tramos[tramos.length - 1];
+      if (ultimo && ultimo.esNocturno === esNocturno && ultimo.esDiaSiguiente === esDiaSiguiente) {
+        ultimo.minutos++;
       } else {
-        // Día 2
-        if (esNocturno) minutosNocturnosDia2++;
-        else minutosDiurnosDia2++;
+        tramos.push({ esNocturno, esDiaSiguiente, minutos: 1 });
       }
     }
 
-    const horasNocturnasDia1 = minutosNocturnosDia1 / 60;
-    const horasDiurnasDia1 = minutosDiurnosDia1 / 60;
-    const horasNocturnasDia2 = minutosNocturnosDia2 / 60;
-    const horasDiurnasDia2 = minutosDiurnosDia2 / 60;
-
     let horasAcumuladasLocal = horasAcumuladas;
-
-    if (horasDiurnasDia1 > 0) {
+    tramos.forEach((tramo) => {
+      const horas = tramo.minutos / 60;
       this._distribuirHoras(
-        horasDiurnasDia1,
-        false,
-        esFestivoInicio,
+        horas,
+        tramo.esNocturno,
+        tramo.esDiaSiguiente ? esFestivoSiguiente : esFestivoInicio,
         resultado,
         horasAcumuladasLocal,
         horasMaximas
       );
-      horasAcumuladasLocal += horasDiurnasDia1;
-    }
-    if (horasNocturnasDia1 > 0) {
-      this._distribuirHoras(
-        horasNocturnasDia1,
-        true,
-        esFestivoInicio,
-        resultado,
-        horasAcumuladasLocal,
-        horasMaximas
-      );
-      horasAcumuladasLocal += horasNocturnasDia1;
-    }
-    if (horasDiurnasDia2 > 0) {
-      this._distribuirHoras(
-        horasDiurnasDia2,
-        false,
-        esFestivoSiguiente,
-        resultado,
-        horasAcumuladasLocal,
-        horasMaximas
-      );
-      horasAcumuladasLocal += horasDiurnasDia2;
-    }
-    if (horasNocturnasDia2 > 0) {
-      this._distribuirHoras(
-        horasNocturnasDia2,
-        true,
-        esFestivoSiguiente,
-        resultado,
-        horasAcumuladasLocal,
-        horasMaximas
-      );
-    }
+      horasAcumuladasLocal += horas;
+    });
   }
 
   procesarTurnoNoche(resultado, fecha, horasTurno, horasAcumuladas, horasMaximas) {
@@ -2826,77 +3300,119 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
   }
 
   /**
-   * Calcula todos los turnos del período
-   * CORREGIDO: Ahora calcula horas considerando la semana COMPLETA (domingo a sábado)
-   * aunque el período seleccionado no cubra todos los días
+   * Calcula los turnos del período y muestra los resultados.
+   * La semana siempre se evalúa COMPLETA (domingo a sábado), aunque el período
+   * seleccionado no cubra todos sus días.
+   * @param {string[]|null} documentos  Empleados a calcular; null = todos.
    */
-  calcularTurnos() {
+  calcularTurnos(documentos = null) {
     if (this.empleados.size === 0) {
       alert("Primero debe generar el período de trabajo");
       return;
     }
 
-    this.empleados.forEach(empleado => {
-        const resultadosSemanas = [];
+    const seleccion = Array.isArray(documentos) && documentos.length
+      ? documentos.filter((doc) => this.empleados.has(doc))
+      : null;
+    this.filtroResultados = seleccion;
 
-        empleado.semanas.forEach((semana) => {
+    this._empleadosEnResultados().forEach((empleado) => {
+      // Lo que está en pantalla queda guardado: el cálculo y la persistencia usan los mismos datos
+      this._sincronizarTurnosDesdeDOM(empleado);
+      empleado.resultados = this._calcularResultadosEmpleado(empleado);
+    });
+    this.guardarEstadoProgramacion();
+
+    this.mostrarResultados();
+    this.navegarA("seccion-resultados");
+  }
+
+  /**
+   * Empleados visibles en resultados/exportación: todos, o solo los del filtro individual.
+   */
+  _empleadosEnResultados() {
+    const todos = Array.from(this.empleados.values());
+    if (!this.filtroResultados || !this.filtroResultados.length) return todos;
+    return todos.filter((emp) => this.filtroResultados.includes(emp.documento));
+  }
+
+  _redondearHoras(valor) {
+    return Math.round((Number(valor) || 0) * 1e6) / 1e6;
+  }
+
+  /**
+   * Horario real (inicio/fin) de un turno manual: pantalla primero, luego lo guardado.
+   */
+  _obtenerHorarioManual(empleado, semanaNumero, index, turnoGuardado) {
+    const contenedor = typeof document !== "undefined" && document.querySelector
+      ? document.querySelector(`#manual-time-${empleado.documento}-${semanaNumero}-${index}`)
+      : null;
+    if (contenedor) {
+      const inicio = contenedor.querySelector(".manual-inicio")?.value;
+      const fin = contenedor.querySelector(".manual-fin")?.value;
+      if (inicio && fin) return { inicio, fin };
+    }
+    if (turnoGuardado && turnoGuardado.inicioManual && turnoGuardado.finManual) {
+      return { inicio: turnoGuardado.inicioManual, fin: turnoGuardado.finManual };
+    }
+    return null;
+  }
+
+  /**
+   * Motor de cálculo de un empleado. Devuelve un arreglo de resultados por semana.
+   *
+   * Reglas del acumulado semanal (se reinicia cada domingo):
+   * - Turnos trabajados (dinámicos y manual) suman sus horas reales.
+   * - I y V suman sus horas configuradas, excepto domingo y festivo, y solo si en esa
+   *   semana hay al menos un turno realmente trabajado. No son horas trabajadas:
+   *   nunca generan horas ordinarias ni extras por sí mismas.
+   * - A resta sus horas del acumulado; SC reduce el tope (lunes a sábado).
+   * - PR no suma para extras; solo cubre la deuda.
+   * - Las horas de cada turno se clasifican cronológicamente contra el acumulado.
+   */
+  _calcularResultadosEmpleado(empleado) {
+    const resultadosSemanas = [];
+    const turnosConsideradosTrabajados = Object.keys(this.configuracion.turnosDinamicos || {}).concat(["M"]);
+
+    empleado.semanas.forEach((semana) => {
       // --- PASO 1: ANÁLISIS PREVIO DE LA SEMANA COMPLETA ---
-      // Obtener turnos de TODA la semana, incluyendo días fuera de rango (opacos)
-      const turnosDeLaSemanaCompleta = semana.dias.map((dia, index) => {
-        const asignacion = this._obtenerTurnoAsignadoParaDia(
-          empleado,
-          semana.numero,
-          index,
-          dia.fecha
-        );
-        return asignacion.turno;
-      });
+      // Turnos de TODA la semana, incluyendo días fuera de rango (opacos)
+      const asignaciones = semana.dias.map((dia, index) =>
+        this._obtenerTurnoAsignadoParaDia(empleado, semana.numero, index, dia.fecha)
+      );
+      const turnosDeLaSemanaCompleta = asignaciones.map((a) => a.turno);
 
-      const turnosConsideradosTrabajados = Object.keys(this.configuracion.turnosDinamicos || {}).concat(["M"]);
-      const domingoTrabajado =
-        turnosDeLaSemanaCompleta[0] &&
-        turnosConsideradosTrabajados.includes(turnosDeLaSemanaCompleta[0]);
+      const semanaConTurnoReal = turnosDeLaSemanaCompleta.some(
+        (t) => t && turnosConsideradosTrabajados.includes(t)
+      );
       let diasLibresCount = turnosDeLaSemanaCompleta.filter((t) => t === "C").length;
 
-      // --- PASO 2: CÁLCULO DEL TOPE DE HORAS SEMANALES ---
-      const turnosSemana = [];
-      let horasTrabajadasSemana = 0;
-      let horasEquivalentesPositivasSemana = 0; // I, PR, V: solo cubren deuda (no suman para extras)
-      let horasEquivalentesNegativasSemana = 0; // A: restan del acumulador de tope
-      const detalleHorasEquivalentesSemana = {};
-
+      // --- PASO 2: TOPE DE HORAS SEMANALES ---
       // El tope base es 42 h. SC (Sin Contrato) lo reduce por cada día lunes–sábado.
-      // El domingo con SC NO reduce el tope.
       const horasMaximasSemanales = this.horasMaximasSemanalesNormal;
       let ajusteTope = 0;
       semana.dias.forEach((dia, index) => {
         if (index === 0) return; // domingo: SC no reduce tope
         const turno = turnosDeLaSemanaCompleta[index];
         if (!turno) return;
-        const ajuste = this._obtenerAjusteConceptoEspecial(turno, false);
-        ajusteTope += (ajuste.ajusteTope || 0);
+        ajusteTope += this._obtenerAjusteConceptoEspecial(turno, false).ajusteTope || 0;
       });
       const horasMaximasAjustadas = Math.max(0, horasMaximasSemanales + ajusteTope);
 
-      // --- PASO 3: ACUMULAR HORAS DE TODA LA SEMANA (para cálculo correcto de extras) ---
-      // CRÍTICO: Debemos acumular las horas en ORDEN cronológico de la semana completa
+      // --- PASO 3: ACUMULAR EN ORDEN CRONOLÓGICO ---
+      const turnosSemana = [];
+      let horasTrabajadasSemana = 0;
+      let horasCubreDeudaSemana = 0; // I, PR, V: horas justificadas para la deuda
+      let horasEquivalentesNegativasSemana = 0; // A: restan del acumulador
+      let horasReconocidasTopeSemana = 0; // I, V: horas que sí suman al acumulado
+      const detalleHorasEquivalentesSemana = {};
       let horasAcumuladasParaExtras = 0;
 
-      // Primero calculamos las horas acumuladas ANTES de cada día
-      const horasAcumuladasPorDia = [];
-
       semana.dias.forEach((dia, index) => {
-        // Guardar el acumulado ANTES de este día
-        horasAcumuladasPorDia[index] = horasAcumuladasParaExtras;
-
-        const asignacionTurnoDia = this._obtenerTurnoAsignadoParaDia(
-          empleado,
-          semana.numero,
-          index,
-          dia.fecha
-        );
-        const turnoGuardado = asignacionTurnoDia.turnoGuardado;
-        const turno = asignacionTurnoDia.turno;
+        const { turno, turnoGuardado } = asignaciones[index];
+        const esFestivoDia = this.esFestivo(dia.fecha);
+        // Acumulado ANTES de este día
+        const acumuladoAntesDelDia = horasAcumuladasParaExtras;
 
         let resultadoDelTurno = {
           horasOrdinarias: 0,
@@ -2910,153 +3426,104 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
           totalHoras: 0,
           horasEfectivasParaExtras: 0,
           horasEquivalentesTope: 0,
+          horasIncapacidad: 0,
+          horasVacaciones: 0,
           horasDeuda: 0,
+          inicio: null,
+          fin: null,
         };
 
-        const ajusteConceptoEspecial = turno
-          ? this._obtenerAjusteConceptoEspecial(turno, index === 0)
-          : { ajusteAcumulador: 0, ajusteTope: 0 };
-        // horasEquivalentesDia: horas justificadas (I/PR/V) que solo cubren deuda, para display
-        const horasEquivalentesDia = ajusteConceptoEspecial.horasCubreDeuda || 0;
+        const ajusteConcepto = turno
+          ? this._obtenerAjusteConceptoEspecial(turno, index === 0, { esFestivo: esFestivoDia, semanaConTurnoReal })
+          : { ajusteAcumulador: 0, ajusteTope: 0, horasCubreDeuda: 0, horasReconocidas: 0 };
 
         if (turno && turnosConsideradosTrabajados.includes(turno)) {
-          let horasTurno = 0;
-          if (turno === 'M') {
-            // Para turno manual, obtener las horas del turno guardado o del DOM
-            if (turnoGuardado && turnoGuardado.inicioManual && turnoGuardado.finManual) {
-              horasTurno = this.calcularHorasTurnoConAlmuerzo(
-                turnoGuardado.inicioManual,
-                turnoGuardado.finManual,
-                this.configuracionAlmuerzo
-              );
-            } else {
-              const manualContainer = document.querySelector(`#manual-time-${empleado.documento}-${semana.numero}-${index}`);
-              if (manualContainer) {
-                const inicioManual = manualContainer.querySelector('.manual-inicio').value;
-                const finManual = manualContainer.querySelector('.manual-fin').value;
-                horasTurno = this.calcularHorasTurnoConAlmuerzo(inicioManual, finManual, this.configuracionAlmuerzo);
-              }
-            }
-          } else {
-            // Turno no manual: calcular según configuración disponible
-            const tipoCfg = this.configuracion.turnosDinamicos[turno] || this.tiposTurno[turno];
-            if (tipoCfg) {
-              const es24 = tipoCfg.inicio === tipoCfg.fin;
-              if (tipoCfg.descontarAlimentacion !== false) {
-                horasTurno = this.calcularHorasTurnoConAlmuerzo(tipoCfg.inicio, tipoCfg.fin, this.configuracionAlmuerzo, es24);
-              } else {
-                horasTurno = this.calcularHorasDesdeTiempos(tipoCfg.inicio, tipoCfg.fin, false, 0);
-              }
-            }
-          }
-          horasAcumuladasParaExtras += horasTurno;
-          const esDomingoTrabajado =
-            index === 0 && turnosConsideradosTrabajados.includes(turno);
-          let hayLibreEnSemana = diasLibresCount > 0;
-          let forzarExtrasDomingo = esDomingoTrabajado && !hayLibreEnSemana;
+          // Domingo trabajado sin ningún día libre en la semana: sus horas son extras
+          const esDomingoTrabajado = index === 0;
+          const forzarExtrasDomingo = esDomingoTrabajado && diasLibresCount === 0;
+          if (esDomingoTrabajado && diasLibresCount > 0) diasLibresCount--;
 
-          if (esDomingoTrabajado && hayLibreEnSemana) {
-            diasLibresCount--;
-          }
-
-          // CRÍTICO: Usar las horas acumuladas ANTES de este día
-          const acumuladorDelDia = forzarExtrasDomingo
-            ? horasMaximasAjustadas
-            : horasAcumuladasPorDia[index];
+          const acumuladorDelDia = forzarExtrasDomingo ? horasMaximasAjustadas : acumuladoAntesDelDia;
 
           if (turno === "M") {
-            const manualInputsContainer = document.querySelector(
-              `#manual-time-${empleado.documento}-${semana.numero}-${index}`
-            );
-            const inicioManual =
-              manualInputsContainer.querySelector(".manual-inicio").value;
-            const finManual =
-              manualInputsContainer.querySelector(".manual-fin").value;
-            const horasCalculadas = this.calcularHorasTurnoConAlmuerzo(
-              inicioManual,
-              finManual,
-              this.configuracionAlmuerzo
-            );
-
-            resultadoDelTurno = {
-              horasOrdinarias: 0,
-              horasNocturnas: 0,
-              horasFestivas: 0,
-              horasNocturnasFestivas: 0,
-              extrasOrdinarias: 0,
-              extrasNocturnas: 0,
-              extrasFestivas: 0,
-              extrasNocturnasFestivas: 0,
-              totalHoras: horasCalculadas,
-              horasEfectivasParaExtras: horasCalculadas,
-              horasEquivalentesTope: 0,
-              horasDeuda: 0,
-            };
-
-            this._procesarTurnoDetallado(
-              resultadoDelTurno,
-              dia.fecha,
-              horasCalculadas,
-              inicioManual,
-              finManual,
-              acumuladorDelDia,
-              horasMaximasAjustadas,
-              true
-            );
-            resultadoDelTurno.inicio = inicioManual;
-            resultadoDelTurno.fin = finManual;
+            const horario = this._obtenerHorarioManual(empleado, semana.numero, index, turnoGuardado);
+            if (horario) {
+              const horasCalculadas = this.calcularHorasTurnoConAlmuerzo(
+                horario.inicio,
+                horario.fin,
+                this.configuracionAlmuerzo
+              );
+              resultadoDelTurno.totalHoras = horasCalculadas;
+              resultadoDelTurno.horasEfectivasParaExtras = horasCalculadas;
+              this._procesarTurnoDetallado(
+                resultadoDelTurno,
+                dia.fecha,
+                horasCalculadas,
+                horario.inicio,
+                horario.fin,
+                acumuladorDelDia,
+                horasMaximasAjustadas,
+                true
+              );
+              resultadoDelTurno.inicio = horario.inicio;
+              resultadoDelTurno.fin = horario.fin;
+            }
           } else {
-            resultadoDelTurno = this.calcularHorasTurno(
-              turno,
-              dia.fecha,
-              acumuladorDelDia,
-              horasMaximasAjustadas
-            );
-            resultadoDelTurno.inicio = this.tiposTurno[turno]?.inicio || null;
-            resultadoDelTurno.fin = this.tiposTurno[turno]?.fin || null;
+            resultadoDelTurno = {
+              ...resultadoDelTurno,
+              ...this.calcularHorasTurno(turno, dia.fecha, acumuladorDelDia, horasMaximasAjustadas),
+              inicio: this.tiposTurno[turno]?.inicio || null,
+              fin: this.tiposTurno[turno]?.fin || null,
+            };
           }
 
+          horasAcumuladasParaExtras += resultadoDelTurno.totalHoras;
           horasTrabajadasSemana += resultadoDelTurno.totalHoras;
         } else if (turno) {
-          // Mostrar cualquier turno no productivo o concepto especial (C, SC, V, I, etc.)
-          resultadoDelTurno = {
-            horasOrdinarias: 0,
-            horasNocturnas: 0,
-            horasFestivas: 0,
-            horasNocturnasFestivas: 0,
-            extrasOrdinarias: 0,
-            extrasNocturnas: 0,
-            extrasFestivas: 0,
-            extrasNocturnasFestivas: 0,
-            totalHoras: 0,
-            horasEfectivasParaExtras: 0,
-            horasEquivalentesTope: horasEquivalentesDia,
-            horasDeuda: 0,
-            inicio: this.tiposTurno[turno]?.inicio || null,
-            fin: this.tiposTurno[turno]?.fin || null,
-          };
+          // Día no trabajado: libre o concepto de nómina. Nunca genera horas trabajadas.
+          resultadoDelTurno.inicio = this.tiposTurno[turno]?.inicio || null;
+          resultadoDelTurno.fin = this.tiposTurno[turno]?.fin || null;
         }
 
-        // I/PR/V: solo cubren la deuda semanal; NUNCA suman al acumulador de extras
-        if (horasEquivalentesDia > 0) {
-          horasEquivalentesPositivasSemana += horasEquivalentesDia;
+        // Conceptos de nómina sobre el acumulado y la deuda
+        const horasCubreDeuda = ajusteConcepto.horasCubreDeuda || 0;
+        const horasReconocidas = ajusteConcepto.horasReconocidas || 0;
+        resultadoDelTurno.horasEquivalentesTope = horasCubreDeuda;
+        if (horasCubreDeuda > 0) {
+          horasCubreDeudaSemana += horasCubreDeuda;
           detalleHorasEquivalentesSemana[turno] =
-            (detalleHorasEquivalentesSemana[turno] || 0) + horasEquivalentesDia;
+            (detalleHorasEquivalentesSemana[turno] || 0) + horasCubreDeuda;
         }
-        // A (Ausencia): resta del acumulador de extras
-        if (ajusteConceptoEspecial.ajusteAcumulador < 0) {
-          horasEquivalentesNegativasSemana += Math.abs(ajusteConceptoEspecial.ajusteAcumulador);
-          horasAcumuladasParaExtras = Math.max(
-            0,
-            horasAcumuladasParaExtras + ajusteConceptoEspecial.ajusteAcumulador
-          );
+        if (horasReconocidas > 0) {
+          // I/V: suman al acumulado en el orden en que ocurren
+          horasAcumuladasParaExtras += horasReconocidas;
+          horasReconocidasTopeSemana += horasReconocidas;
+          const categoria = this._obtenerCategoriaConcepto(turno);
+          if (categoria === "incapacidad") resultadoDelTurno.horasIncapacidad = horasReconocidas;
+          if (categoria === "vacaciones") resultadoDelTurno.horasVacaciones = horasReconocidas;
         }
+        if (ajusteConcepto.ajusteAcumulador < 0) {
+          // A (Ausencia): resta del acumulado
+          horasEquivalentesNegativasSemana += Math.abs(ajusteConcepto.ajusteAcumulador);
+          horasAcumuladasParaExtras = Math.max(0, horasAcumuladasParaExtras + ajusteConcepto.ajusteAcumulador);
+        }
+
+        [
+          "horasOrdinarias", "horasNocturnas", "horasFestivas", "horasNocturnasFestivas",
+          "extrasOrdinarias", "extrasNocturnas", "extrasFestivas", "extrasNocturnasFestivas",
+          "totalHoras", "horasEfectivasParaExtras", "horasEquivalentesTope",
+          "horasIncapacidad", "horasVacaciones",
+        ].forEach((key) => {
+          resultadoDelTurno[key] = this._redondearHoras(resultadoDelTurno[key]);
+        });
 
         turnosSemana.push({
           dia: dia.nombreDia,
           fecha: dia.fecha,
-          turno: turno || 'C',
-          esFestivo: dia.esFestivo,
+          turno: turno || "C",
+          esFestivo: esFestivoDia,
+          esDomingo: index === 0,
+          enRango: dia.enRango !== false,
           ...resultadoDelTurno,
         });
       });
@@ -3065,9 +3532,9 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       // Deuda: trabajadas + justificadas (I/PR/V) - ausencias (A), nunca menor a 0
       const horasAcumuladasParaTope = Math.max(
         0,
-        horasTrabajadasSemana + horasEquivalentesPositivasSemana - horasEquivalentesNegativasSemana
+        horasTrabajadasSemana + horasCubreDeudaSemana - horasEquivalentesNegativasSemana
       );
-      resumenSemana.horasDeuda = Math.max(0, horasMaximasAjustadas - horasAcumuladasParaTope);
+      resumenSemana.horasDeuda = this._redondearHoras(Math.max(0, horasMaximasAjustadas - horasAcumuladasParaTope));
       resultadosSemanas.push({
         numero: semana.numero,
         inicioSemana: semana.inicioSemana,
@@ -3075,21 +3542,18 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         turnos: turnosSemana,
         resumen: resumenSemana,
         horasMaximas: horasMaximasAjustadas,
-        horasEquivalentesTope: horasEquivalentesPositivasSemana,
+        horasEquivalentesTope: this._redondearHoras(horasCubreDeudaSemana),
+        horasReconocidasTope: this._redondearHoras(horasReconocidasTopeSemana),
         horasEquivalentesNegativas: horasEquivalentesNegativasSemana,
+        semanaConTurnoReal,
         ajusteTope,
-        horasAcumuladasParaTope,
+        horasAcumuladasParaTope: this._redondearHoras(horasAcumuladasParaTope),
         detalleHorasEquivalentesTope: detalleHorasEquivalentesSemana,
       });
     });
-        empleado.resultados = resultadosSemanas;
-    });
 
-    this.mostrarResultados();
-    this.navegarA("seccion-resultados");
+    return resultadosSemanas;
   }
-
-  
 
   /**
    * Calcula el resumen de una semana
@@ -3106,6 +3570,8 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       extrasNocturnas: 0,
       extrasFestivas: 0,
       extrasNocturnasFestivas: 0,
+      horasIncapacidad: 0,
+      horasVacaciones: 0,
       horasDeuda: 0,
     };
 
@@ -3115,6 +3581,9 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         resumen[key] += turno[key] || 0;
       });
     });
+    Object.keys(resumen).forEach((key) => {
+      resumen[key] = this._redondearHoras(resumen[key]);
+    });
 
     return resumen;
   }
@@ -3123,24 +3592,44 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
    * Muestra los resultados calculados
    */
   mostrarResultados() {
-    if (this.empleados.size === 0) {
+    const lista = this._empleadosEnResultados();
+    if (lista.length === 0) {
         document.getElementById("info-empleado").innerHTML = `<p>No hay resultados para mostrar.</p>`;
         return;
     }
 
-    const primerEmpleado = this.empleados.values().next().value;
-    const fechaInicioGeneral = new Date(document.getElementById("fecha-inicio").value + 'T00:00:00');
-    const fechaFinGeneral = new Date(document.getElementById("fecha-fin").value + 'T00:00:00');
+    const individual = Boolean(this.filtroResultados && this.filtroResultados.length);
+    const formato = (f) => new Date(`${f}T00:00:00`).toLocaleDateString("es-CO");
 
     // Muestra la información del empleado y el período en la cabecera de resultados.
-    document.getElementById("info-empleado").innerHTML = `
-      <h4>Resultados para ${this.empleados.size} empleado(s)</h4>
-      <p>Período General: ${fechaInicioGeneral.toLocaleDateString(
-        "es-ES"
-      )} - ${fechaFinGeneral.toLocaleDateString(
-      "es-ES"
-    )}</p>
-    `;
+    if (individual && lista.length === 1) {
+      const emp = lista[0];
+      document.getElementById("info-empleado").innerHTML = `
+        <div class="info-resultado-individual">
+          <div>
+            <span class="etiqueta-modo">Resultado individual</span>
+            <h4>${this._escaparHTML(emp.nombre)} <small>(Documento ${emp.documento})</small></h4>
+            <p>Período: ${formato(emp.fechaInicio)} – ${formato(emp.fechaFin)}</p>
+          </div>
+          <button type="button" class="boton-secundario" id="btn-ver-todos-resultados">Ver resultados de todos</button>
+        </div>
+      `;
+      document.getElementById("btn-ver-todos-resultados")
+        .addEventListener("click", () => this.calcularTurnos(null));
+    } else {
+      const fechaInicioGeneral = document.getElementById("fecha-inicio").value;
+      const fechaFinGeneral = document.getElementById("fecha-fin").value;
+      document.getElementById("info-empleado").innerHTML = `
+        <h4>Resultados para ${lista.length} empleado(s)</h4>
+        <p>Período General: ${formato(fechaInicioGeneral)} – ${formato(fechaFinGeneral)}</p>
+      `;
+    }
+    const btnExportar = document.getElementById("btn-exportar");
+    if (btnExportar) {
+      btnExportar.textContent = individual && lista.length === 1
+        ? `Exportar resultados de ${lista[0].nombre}`
+        : "Exportar Resultados";
+    }
 
     this.mostrarResultadosSemanales(); // Dibuja la tabla de resultados por semana.
     this.mostrarResumenTotal(); // Dibuja el resumen total del período.
@@ -3154,7 +3643,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     const contenedor = document.getElementById("resultados-semanales");
     contenedor.innerHTML = "";
 
-    this.empleados.forEach((empleado) => {
+    this._empleadosEnResultados().forEach((empleado) => {
       // Itera sobre cada semana en los resultados.
       if (!empleado.resultados) return;
 
@@ -3179,20 +3668,28 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         semana.detalleHorasEquivalentesTope || {}
       ).map(([codigo, horas]) => {
         const nombre = this.tiposTurno[codigo]?.nombre || codigo;
-        return `${codigo} (${nombre}): ${Number(horas).toFixed(1)}h`;
+        return `${codigo} (${nombre}): ${Number(horas).toFixed(2)}h`;
       });
       const tooltipEquivalentes = detalleEquivalentes.length
-        ? `Horas justificadas que cubren la deuda semanal (no suman para extras): ${detalleEquivalentes.join(", ")}`
+        ? `Horas justificadas que cubren la deuda semanal: ${detalleEquivalentes.join(", ")}`
         : "No hay horas justificadas por conceptos especiales en esta semana.";
       const detalleVisible = detalleEquivalentes.length
         ? ` (${detalleEquivalentes.join(" · ")})`
         : "";
+      const reconocidasIncap = semana.resumen.horasIncapacidad || 0;
+      const reconocidasVac = semana.resumen.horasVacaciones || 0;
+      const tieneIV = semana.turnos.some((t) => ["incapacidad", "vacaciones"].includes(this._obtenerCategoriaConcepto(t.turno)));
+      const indicadorReconocidas = tieneIV
+        ? (semana.semanaConTurnoReal
+            ? ` <span class="tope-equivalentes tope-reconocidas" title="Incapacidad y vacaciones suman al acumulado de 42 h (no en domingo ni festivo)">• Suman al tope: Incapacidad ${reconocidasIncap.toFixed(2)}h · Vacaciones ${reconocidasVac.toFixed(2)}h</span>`
+            : ` <span class="tope-equivalentes tope-sin-turno" title="Sin turnos trabajados en la semana, incapacidad y vacaciones no suman al acumulado">• Sin turno trabajado: I/V no suman al tope</span>`)
+        : "";
 
       const indicadorNegativo = horasEquivalentesNegativas > 0
-        ? ` <span class="tope-equivalentes tope-negativo" title="Ausencias descuentan del acumulado semanal">• Ausencias: −${horasEquivalentesNegativas.toFixed(1)}h</span>`
+        ? ` <span class="tope-equivalentes tope-negativo" title="Ausencias descuentan del acumulado semanal">• Ausencias: −${horasEquivalentesNegativas.toFixed(2)}h</span>`
         : "";
       const indicadorTopeAjuste = ajusteTopeSC < 0
-        ? ` <span class="tope-equivalentes tope-sc" title="Sin Contrato reduce el tope semanal (solo lunes–sábado)">• SC: tope −${Math.abs(ajusteTopeSC).toFixed(1)}h</span>`
+        ? ` <span class="tope-equivalentes tope-sc" title="Sin Contrato reduce el tope semanal (solo lunes–sábado)">• SC: tope −${Math.abs(ajusteTopeSC).toFixed(2)}h</span>`
         : "";
 
       const divSemana = document.createElement("div");
@@ -3205,7 +3702,8 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         <p class="tope-horas">Tope de horas para esta semana: ${
           semana.horasMaximas
         } horas
-        <span class="tope-equivalentes" title="${tooltipEquivalentes.replace(/"/g, "&quot;")}">• Horas justificadas (I/PR/V, solo deuda): ${horasEquivalentesTope.toFixed(1)}h${detalleVisible}</span>${indicadorNegativo}${indicadorTopeAjuste}
+        ${indicadorReconocidas}
+        <span class="tope-equivalentes" title="${tooltipEquivalentes.replace(/"/g, "&quot;")}">• Justificadas para deuda (I/PR/V): ${horasEquivalentesTope.toFixed(2)}h${detalleVisible}</span>${indicadorNegativo}${indicadorTopeAjuste}
         </p>
         <div class="tabla-contenedor">
           <table class="tabla-turnos">
@@ -3233,9 +3731,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
                     const val = parseFloat(valor);
                     const claseValor =
                       val > 0 ? "valor-positivo" : "valor-cero";
-                    return `<td class="${clase} ${claseValor}">${val.toFixed(
-                      1
-                    )}</td>`;
+                    return `<td class="${clase} ${claseValor}">${val.toFixed(2)}</td>`;
                   };
 
                   const descripcionTurno = this.formatearNombreYHorarioTurno(
@@ -3280,30 +3776,14 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
             <tfoot>
               <tr class="fila-total">
                 <td colspan="2"><strong>TOTAL SEMANA</strong></td>
-                <td class="horas-ord"><strong>${semana.resumen.horasOrdinarias.toFixed(
-                  1
-                )}</strong></td>
-                <td class="horas-noc"><strong>${semana.resumen.horasNocturnas.toFixed(
-                  1
-                )}</strong></td>
-                <td class="horas-fest"><strong>${semana.resumen.horasFestivas.toFixed(
-                  1
-                )}</strong></td>
-                <td class="horas-noc-fest"><strong>${semana.resumen.horasNocturnasFestivas.toFixed(
-                  1
-                )}</strong></td>
-                <td class="extras-ord"><strong>${semana.resumen.extrasOrdinarias.toFixed(
-                  1
-                )}</strong></td>
-                <td class="extras-noc"><strong>${semana.resumen.extrasNocturnas.toFixed(
-                  1
-                )}</strong></td>
-                <td class="extras-fest"><strong>${semana.resumen.extrasFestivas.toFixed(
-                  1
-                )}</strong></td>
-                <td class="extras-noc-fest"><strong>${semana.resumen.extrasNocturnasFestivas.toFixed(
-                  1
-                )}</strong></td>
+                <td class="horas-ord"><strong>${semana.resumen.horasOrdinarias.toFixed(2)}</strong></td>
+                <td class="horas-noc"><strong>${semana.resumen.horasNocturnas.toFixed(2)}</strong></td>
+                <td class="horas-fest"><strong>${semana.resumen.horasFestivas.toFixed(2)}</strong></td>
+                <td class="horas-noc-fest"><strong>${semana.resumen.horasNocturnasFestivas.toFixed(2)}</strong></td>
+                <td class="extras-ord"><strong>${semana.resumen.extrasOrdinarias.toFixed(2)}</strong></td>
+                <td class="extras-noc"><strong>${semana.resumen.extrasNocturnas.toFixed(2)}</strong></td>
+                <td class="extras-fest"><strong>${semana.resumen.extrasFestivas.toFixed(2)}</strong></td>
+                <td class="extras-noc-fest"><strong>${semana.resumen.extrasNocturnasFestivas.toFixed(2)}</strong></td>
                 <td class="horas-turno"><strong>${(
                   semana.resumen.horasOrdinarias +
                   semana.resumen.horasNocturnas +
@@ -3313,16 +3793,14 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
                   semana.resumen.extrasNocturnas +
                   semana.resumen.extrasFestivas +
                   semana.resumen.extrasNocturnasFestivas
-                ).toFixed(1)}</strong></td>
+                ).toFixed(2)}</strong></td>
               </tr>
               ${
                 semana.resumen.horasDeuda > 0
                   ? `
               <tr class="fila-deuda">
                 <td colspan="10"><strong>Horas Faltantes en la Semana</strong></td>
-                <td><strong>${semana.resumen.horasDeuda.toFixed(
-                  1
-                )}</strong></td>
+                <td><strong>${semana.resumen.horasDeuda.toFixed(2)}</strong></td>
               </tr>
               `
                   : ""
@@ -3348,24 +3826,61 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
   /**
    * Muestra el resumen total del período
    */
+  /**
+   * Suma de todos los resúmenes semanales de un empleado (misma fuente para pantalla y Excel).
+   */
+  calcularResumenPeriodo(empleado) {
+    const total = {
+      totalHoras: 0, horasOrdinarias: 0, horasNocturnas: 0, horasFestivas: 0,
+      horasNocturnasFestivas: 0, extrasOrdinarias: 0, extrasNocturnas: 0,
+      extrasFestivas: 0, extrasNocturnasFestivas: 0, horasIncapacidad: 0,
+      horasVacaciones: 0, horasDeuda: 0,
+    };
+    (empleado.resultados || []).forEach((semana) => {
+      Object.keys(total).forEach((key) => {
+        total[key] += semana.resumen[key] || 0;
+      });
+    });
+    Object.keys(total).forEach((key) => { total[key] = this._redondearHoras(total[key]); });
+    return total;
+  }
+
+  /**
+   * Conceptos de liquidación (recargos y extras) con valor unitario y subtotal.
+   * Recargo: valor hora × %. Extra: valor hora × (1 + %).
+   */
+  calcularLiquidacionEmpleado(empleado) {
+    const valorHoraOrdinaria = (empleado.salario || 0) / 220;
+    const r = this.calcularResumenPeriodo(empleado);
+    const c = this.configuracion;
+    const conceptos = [
+      { etiqueta: "Recargo Nocturno", horas: r.horasNocturnas, porcentaje: c.recargoNocturno.porcentaje, tipo: "recargo" },
+      { etiqueta: "Recargo Festivo", horas: r.horasFestivas, porcentaje: c.recargoFestivo.porcentaje, tipo: "recargo" },
+      { etiqueta: "Recargo Nocturno Festivo", horas: r.horasNocturnasFestivas, porcentaje: c.recargoNocturnoFestivo.porcentaje, tipo: "recargo" },
+      { etiqueta: "Horas Extras Ordinarias", horas: r.extrasOrdinarias, porcentaje: c.extraDiurna.porcentaje, tipo: "extra" },
+      { etiqueta: "Horas Extras Nocturnas", horas: r.extrasNocturnas, porcentaje: c.extraNocturna.porcentaje, tipo: "extra" },
+      { etiqueta: "Horas Extras Festivas", horas: r.extrasFestivas, porcentaje: c.extraDiurnaFestiva.porcentaje, tipo: "extra" },
+      { etiqueta: "Horas Extras Nocturnas Festivas", horas: r.extrasNocturnasFestivas, porcentaje: c.extraNocturnaFestiva.porcentaje, tipo: "extra" },
+    ]
+      .filter((x) => x.horas > 0)
+      .map((x) => {
+        const valorUnitario = x.tipo === "recargo"
+          ? valorHoraOrdinaria * (x.porcentaje / 100)
+          : valorHoraOrdinaria * (1 + x.porcentaje / 100);
+        return { ...x, valorUnitario, subtotal: x.horas * valorUnitario };
+      });
+    const total = conceptos.reduce((acc, x) => acc + x.subtotal, 0);
+    return { valorHoraOrdinaria, conceptos, total };
+  }
+
   mostrarResumenTotal() {
     // Acumula los resúmenes de todas las semanas en un solo objeto.
     const resumenesPorEmpleado = [];
 
-    this.empleados.forEach(empleado => {
+    this._empleadosEnResultados().forEach(empleado => {
         if (!empleado.resultados) return;
 
-        const resumenTotalEmpleado = {
-            totalHoras: 0, horasOrdinarias: 0, horasNocturnas: 0, horasFestivas: 0,
-            horasNocturnasFestivas: 0, extrasOrdinarias: 0, extrasNocturnas: 0,
-            extrasFestivas: 0, extrasNocturnasFestivas: 0, horasDeuda: 0,
-        };
-
-        empleado.resultados.forEach((semana) => {
-            Object.keys(resumenTotalEmpleado).forEach((key) => {
-                resumenTotalEmpleado[key] += semana.resumen[key];
-            });
-        });
+        const resumenTotalEmpleado = this.calcularResumenPeriodo(empleado);
 
         resumenesPorEmpleado.push({
             empleado: empleado,
@@ -3388,44 +3903,52 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
                 <div class="grid-resumen">
                     <div class="item-resumen">
                         <span class="etiqueta">Total Horas Trabajadas:</span>
-                        <span class="valor">${resumen.totalHoras.toFixed(1)}</span>
+                        <span class="valor">${resumen.totalHoras.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen">
                         <span class="etiqueta">Horas Ordinarias:</span>
-                        <span class="valor">${resumen.horasOrdinarias.toFixed(1)}</span>
+                        <span class="valor">${resumen.horasOrdinarias.toFixed(2)}</span>
+                    </div>
+                    <div class="item-resumen reconocida-incapacidad">
+                        <span class="etiqueta">Horas reconocidas por incapacidad:</span>
+                        <span class="valor">${resumen.horasIncapacidad.toFixed(2)}</span>
+                    </div>
+                    <div class="item-resumen reconocida-vacaciones">
+                        <span class="etiqueta">Horas reconocidas por vacaciones:</span>
+                        <span class="valor">${resumen.horasVacaciones.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen recargo-nocturno">
                         <span class="etiqueta">Recargo Nocturno (${conf.recargoNocturno.porcentaje}%):</span>
-                        <span class="valor">${resumen.horasNocturnas.toFixed(1)}</span>
+                        <span class="valor">${resumen.horasNocturnas.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen recargo-festivo">
                         <span class="etiqueta">Recargo Festivo (${conf.recargoFestivo.porcentaje}%):</span>
-                        <span class="valor">${resumen.horasFestivas.toFixed(1)}</span>
+                        <span class="valor">${resumen.horasFestivas.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen recargo-noc-festivo">
                         <span class="etiqueta">Recargo Noc. Festivo (${conf.recargoNocturnoFestivo.porcentaje}%):</span>
-                        <span class="valor">${resumen.horasNocturnasFestivas.toFixed(1)}</span>
+                        <span class="valor">${resumen.horasNocturnasFestivas.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen extra-ordinaria">
                         <span class="etiqueta">Extra Ordinaria (${conf.extraDiurna.porcentaje}%):</span>
-                        <span class="valor">${resumen.extrasOrdinarias.toFixed(1)}</span>
+                        <span class="valor">${resumen.extrasOrdinarias.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen extra-nocturna">
                         <span class="etiqueta">Extra Nocturna (${conf.extraNocturna.porcentaje}%):</span>
-                        <span class="valor">${resumen.extrasNocturnas.toFixed(1)}</span>
+                        <span class="valor">${resumen.extrasNocturnas.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen extra-festiva">
                         <span class="etiqueta">Extra Festiva (${conf.extraDiurnaFestiva.porcentaje}%):</span>
-                        <span class="valor">${resumen.extrasFestivas.toFixed(1)}</span>
+                        <span class="valor">${resumen.extrasFestivas.toFixed(2)}</span>
                     </div>
                     <div class="item-resumen extra-noc-festiva">
                         <span class="etiqueta">Extra Noc. Festiva (${conf.extraNocturnaFestiva.porcentaje}%):</span>
-                        <span class="valor">${resumen.extrasNocturnasFestivas.toFixed(1)}</span>
+                        <span class="valor">${resumen.extrasNocturnasFestivas.toFixed(2)}</span>
                     </div>
                     ${resumen.horasDeuda > 0 ? `
                     <div class="item-resumen deuda">
                         <span class="etiqueta">Total Horas Faltantes:</span>
-                        <span class="valor">${resumen.horasDeuda.toFixed(1)}</span>
+                        <span class="valor">${resumen.horasDeuda.toFixed(2)}</span>
                     </div>` : ""}
                 </div>
             </div>
@@ -3448,7 +3971,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     const contenedor = document.getElementById("liquidacion-pago");
     contenedor.innerHTML = "";
 
-    this.empleados.forEach(empleado => {
+    this._empleadosEnResultados().forEach(empleado => {
         if (!empleado.resultados || !empleado.salario || empleado.salario <= 0) {
             return; // No muestra liquidación si no hay datos o salario
         }
@@ -3457,49 +3980,20 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
         const nombreEmpleado = empleado.nombre;
         const documentoEmpleado = empleado.documento;
 
-        const valorHoraOrdinaria = salarioMensual / 220;
+        // Misma fuente que la hoja "Liquidación de Pago" del Excel
+        const liquidacion = this.calcularLiquidacionEmpleado(empleado);
+        const valorHoraOrdinaria = liquidacion.valorHoraOrdinaria;
+        const totalAPagar = liquidacion.total;
+        const moneda = (v) => v.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
 
-        const resumenTotal = empleado.resultados.reduce((acc, semana) => {
-            Object.keys(semana.resumen).forEach((key) => {
-                acc[key] = (acc[key] || 0) + semana.resumen[key];
-            });
-            return acc;
-        }, {});
-
-        // Define los conceptos a liquidar (solo recargos y extras).
-        const conceptos = [
-            { etiqueta: "Recargo Nocturno", horas: resumenTotal.horasNocturnas, porcentaje: this.configuracion.recargoNocturno.porcentaje, tipo: "recargo" },
-            { etiqueta: "Recargo Festivo", horas: resumenTotal.horasFestivas, porcentaje: this.configuracion.recargoFestivo.porcentaje, tipo: "recargo" },
-            { etiqueta: "Recargo Nocturno Festivo", horas: resumenTotal.horasNocturnasFestivas, porcentaje: this.configuracion.recargoNocturnoFestivo.porcentaje, tipo: "recargo" },
-            { etiqueta: "Horas Extras Ordinarias", horas: resumenTotal.extrasOrdinarias, porcentaje: this.configuracion.extraDiurna.porcentaje, tipo: "extra" },
-            { etiqueta: "Horas Extras Nocturnas", horas: resumenTotal.extrasNocturnas, porcentaje: this.configuracion.extraNocturna.porcentaje, tipo: "extra" },
-            { etiqueta: "Horas Extras Festivas", horas: resumenTotal.extrasFestivas, porcentaje: this.configuracion.extraDiurnaFestiva.porcentaje, tipo: "extra" },
-            { etiqueta: "Horas Extras Nocturnas Festivas", horas: resumenTotal.extrasNocturnasFestivas, porcentaje: this.configuracion.extraNocturnaFestiva.porcentaje, tipo: "extra" },
-        ];
-
-        let totalAPagar = 0;
-
-        const filasTabla = conceptos.map((c) => {
-            if (c.horas <= 0) return "";
-
-            let valorUnitario, subtotal;
-            if (c.tipo === "recargo") {
-                valorUnitario = valorHoraOrdinaria * (c.porcentaje / 100);
-            } else { // 'extra'
-                valorUnitario = valorHoraOrdinaria * (1 + c.porcentaje / 100);
-            }
-            subtotal = c.horas * valorUnitario;
-            totalAPagar += subtotal;
-
-            return `
+        const filasTabla = liquidacion.conceptos.map((c) => `
                 <tr>
                     <td>${c.etiqueta}</td>
-                    <td>${c.horas.toFixed(1)}</td>
-                    <td class="col-moneda">${valorUnitario.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}</td>
-                    <td class="col-moneda">${subtotal.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}</td>
+                    <td>${c.horas.toFixed(2)}</td>
+                    <td class="col-moneda">${moneda(c.valorUnitario)}</td>
+                    <td class="col-moneda">${moneda(c.subtotal)}</td>
                 </tr>
-            `;
-        }).join("");
+            `).join("");
 
         const opcionesMoneda = { style: "currency", currency: "COP", maximumFractionDigits: 0 };
 
@@ -3551,6 +4045,13 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
    * Limpia todo el formulario
    */
   limpiarTodo() {
+    const hayDatos = this.empleados.size > 0 || this.leerEstadoProgramacion();
+    if (hayDatos && !confirm("¿Borrar todos los empleados y la programación guardada? Esta acción no se puede deshacer.")) {
+      return;
+    }
+    this.borrarEstadoProgramacion();
+    this._ocultarAvisoProgramacionGuardada();
+    this.filtroResultados = null;
     const nombreEmpleadoInput = document.getElementById("nombre-empleado");
     const documentoEmpleadoInput = document.getElementById("documento-empleado");
     const salarioInput = document.getElementById("salario-mensual");
@@ -3569,385 +4070,400 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
   }
 
   /**
-   * Exporta los resultados a un archivo Excel con formato.
+   * Exporta a Excel exactamente los resultados calculados en pantalla
+   * (todos los empleados, o solo el del resultado individual).
    */
   async exportarResultados() {
-    if (this.empleados.size === 0) {
-      alert("No hay resultados para exportar");
+    const empleados = this._empleadosEnResultados().filter((e) => e.resultados);
+    if (empleados.length === 0) {
+      alert("No hay resultados para exportar. Calcule primero los resultados.");
+      return;
+    }
+    if (typeof XLSX === "undefined") {
+      alert("No se pudo cargar la librería de Excel. Verifique la conexión a internet y recargue la página.");
       return;
     }
 
+    const libro = this.construirLibroExcel();
     const wb = XLSX.utils.book_new();
-    const conf = this.configuracion;
-
-    // --- 1. Hoja de Informe de Horas Extras (Nuevo) ---
-    const dataInformeHoras = this._generarDatosInformeHorasExtras();
-    const wsInformeHoras = XLSX.utils.aoa_to_sheet(dataInformeHoras.data);
-    wsInformeHoras["!cols"] = dataInformeHoras.cols;
-    XLSX.utils.book_append_sheet(wb, wsInformeHoras, "Informe Horas Extras");
-
-    // --- 2. Hoja de Liquidación de Pago ---
-    const dataLiquidacion = this._generarDatosLiquidacionParaExportar(); // Ya maneja múltiples empleados
-    const wsLiquidacion = XLSX.utils.aoa_to_sheet(dataLiquidacion);
-    wsLiquidacion["!cols"] = [
-      { wch: 30 },
-      { wch: 30 },
-      { wch: 15 },
-      { wch: 20 },
-      { wch: 20 },
-    ];
-    XLSX.utils.book_append_sheet(wb, wsLiquidacion, "Liquidación de Pago");
-
-    // --- 3. Hoja de Resumen Total de Horas ---
-    const dataResumen = [["Empleado", "Documento", "Concepto", "Total Horas"]];
-    this.empleados.forEach(empleado => {
-        if (!empleado.resultados) return;
-
-        const resumenTotal = empleado.resultados.reduce((acc, semana) => {
-            Object.keys(semana.resumen).forEach((key) => {
-                acc[key] = (acc[key] || 0) + semana.resumen[key];
-            });
-            return acc;
-        }, {
-            totalHoras: 0, horasOrdinarias: 0, horasNocturnas: 0, horasFestivas: 0,
-            horasNocturnasFestivas: 0, extrasOrdinarias: 0, extrasNocturnas: 0,
-            extrasFestivas: 0, extrasNocturnasFestivas: 0, horasDeuda: 0,
-        });
-
-        dataResumen.push(
-            [empleado.nombre, empleado.documento, "Horas Ordinarias", this._formatearNumeroExcel(resumenTotal.horasOrdinarias)],
-            ["", "", `Recargo Nocturno (${conf.recargoNocturno.porcentaje}%)`, this._formatearNumeroExcel(resumenTotal.horasNocturnas)],
-            ["", "", `Recargo Festivo (${conf.recargoFestivo.porcentaje}%)`, this._formatearNumeroExcel(resumenTotal.horasFestivas)],
-            ["", "", `Recargo Noc. Festivo (${conf.recargoNocturnoFestivo.porcentaje}%)`, this._formatearNumeroExcel(resumenTotal.horasNocturnasFestivas)],
-            ["", "", `Extra Ordinaria (${conf.extraDiurna.porcentaje}%)`, this._formatearNumeroExcel(resumenTotal.extrasOrdinarias)],
-            ["", "", `Extra Nocturna (${conf.extraNocturna.porcentaje}%)`, this._formatearNumeroExcel(resumenTotal.extrasNocturnas)],
-            ["", "", `Extra Festiva (${conf.extraDiurnaFestiva.porcentaje}%)`, this._formatearNumeroExcel(resumenTotal.extrasFestivas)],
-            ["", "", `Extra Noc. Festiva (${conf.extraNocturnaFestiva.porcentaje}%)`, this._formatearNumeroExcel(resumenTotal.extrasNocturnasFestivas)],
-            ["", "", "TOTAL HORAS TRABAJADAS", this._formatearNumeroExcel(resumenTotal.totalHoras)],
-            ["", "", "TOTAL HORAS FALTANTES", this._formatearNumeroExcel(resumenTotal.horasDeuda)],
-            [] // Fila vacía para separar empleados
-        );
+    libro.hojas.forEach((hoja) => {
+      XLSX.utils.book_append_sheet(wb, this._crearHojaExcel(hoja), hoja.nombre);
     });
 
-    const wsResumen = XLSX.utils.aoa_to_sheet(dataResumen);
-    wsResumen["!cols"] = [{ wch: 30 }, { wch: 15 }, { wch: 40 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen Total Horas");
-
-    // --- 4. Hojas de Resultados Semanales ---
-    const semanasUnificadas = {};
-    this.empleados.forEach(empleado => {
-        if (!empleado.resultados) return;
-        empleado.resultados.forEach(semana => {
-            if (!semanasUnificadas[semana.numero]) {
-                semanasUnificadas[semana.numero] = {
-                    numero: semana.numero,
-                    empleados: []
-                };
-            }
-            semanasUnificadas[semana.numero].empleados.push({
-                nombre: empleado.nombre,
-                documento: empleado.documento,
-                turnos: semana.turnos,
-                resumen: semana.resumen
-            });
-        });
-    });
-
-    Object.values(semanasUnificadas).forEach(semana => {
-      const header = [
-        "Empleado",
-        "Día",
-        "Fecha",
-        "Turno",
-        "Color",
-        "H. Ord.",
-        "H. Noc.",
-        "H. Fest.",
-        "H. N.F.",
-        "E. Ord.",
-        "E. Noc.",
-        "E. Fest.",
-        "E. N.F.",
-        "Horas x Turno",
-      ];
-
-      const wsData = [header];
-
-      semana.empleados.forEach(empleado => {
-          const dataEmpleado = empleado.turnos.map((t) => {
-                const descripcionTurno = this.formatearNombreYHorarioTexto(t.turno);
-              const totalHorasTurno = (t.horasOrdinarias || 0) + (t.horasNocturnas || 0) + (t.horasFestivas || 0) + (t.horasNocturnasFestivas || 0) + (t.extrasOrdinarias || 0) + (t.extrasNocturnas || 0) + (t.extrasFestivas || 0) + (t.extrasNocturnasFestivas || 0);
-                const colorHex = this.tiposTurno[t.turno]?.color || "#9e9e9e";
-                return [
-                  empleado.nombre,
-                  t.dia,
-                  t.fecha.toLocaleDateString("es-ES"),
-                  descripcionTurno,
-                  colorHex,
-                  this._formatearNumeroExcel(t.horasOrdinarias),
-                  this._formatearNumeroExcel(t.horasNocturnas),
-                  this._formatearNumeroExcel(t.horasFestivas),
-                  this._formatearNumeroExcel(t.horasNocturnasFestivas),
-                  this._formatearNumeroExcel(t.extrasOrdinarias),
-                  this._formatearNumeroExcel(t.extrasNocturnas),
-                  this._formatearNumeroExcel(t.extrasFestivas),
-                  this._formatearNumeroExcel(t.extrasNocturnasFestivas),
-                  this._formatearNumeroExcel(totalHorasTurno),
-              ];
-          });
-
-          wsData.push(...dataEmpleado);
-
-          const totalHorasSemana = Object.values(empleado.resumen).reduce((a, b) => a + b, 0) - empleado.resumen.horasDeuda;
-          const footerEmpleado = [
-              `TOTAL ${empleado.nombre.toUpperCase()}`, "", "", "",
-              this._formatearNumeroExcel(empleado.resumen.horasOrdinarias),
-              this._formatearNumeroExcel(empleado.resumen.horasNocturnas),
-              this._formatearNumeroExcel(empleado.resumen.horasFestivas),
-              this._formatearNumeroExcel(empleado.resumen.horasNocturnasFestivas),
-              this._formatearNumeroExcel(empleado.resumen.extrasOrdinarias),
-              this._formatearNumeroExcel(empleado.resumen.extrasNocturnas),
-              this._formatearNumeroExcel(empleado.resumen.extrasFestivas),
-              this._formatearNumeroExcel(empleado.resumen.extrasNocturnasFestivas),
-              this._formatearNumeroExcel(totalHorasSemana),
-          ];
-          wsData.push(footerEmpleado);
-
-          if (empleado.resumen.horasDeuda > 0) {
-              wsData.push([
-                  "", "", "", "Horas Faltantes", "", "", "", "", "", "", "", "",
-                  this._formatearNumeroExcel(empleado.resumen.horasDeuda),
-              ]);
-          }
-          wsData.push([]); // Fila vacía para separar empleados
-      });
-
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws["!cols"] = [
-        { wch: 30 },
-        { wch: 12 },
-        { wch: 12 },
-        { wch: 25 },
-        { wch: 12 },
-        { wch: 8 },
-        { wch: 8 },
-        { wch: 8 },
-        { wch: 8 },
-        { wch: 8 },
-        { wch: 8 },
-        { wch: 8 },
-        { wch: 12 },
-      ];
-      XLSX.utils.book_append_sheet(wb, ws, `Semana ${semana.numero}`);
-    });
-
-    // --- 5. Hoja de Resumen de Tipos de Turno (Formato Vertical) ---
-    const semanasResultados = this.empleados.values().next().value?.resultados || [];
-
-    // Cabecera: "Tipo de Turno", "Semana 1", "Semana 2", ...
-    const headersTurnos = [
-      "Empleado",
-      "Tipo de Turno",
-      ...semanasResultados.map(semana => `Semana ${semana.numero}`),
-      "Total Período"
-    ];
-    const dataResumenTurnos = [headersTurnos];
-
-    this.empleados.forEach(empleado => {
-        if (!empleado.resultados) return;
-
-        const tiposDeTurnoUsados = [...new Set(empleado.resultados.flatMap(s => s.turnos.map(t => t.turno)))];
-        const totalesEmpleado = { total: 0 };
-        semanasResultados.forEach(s => { totalesEmpleado[s.numero] = 0; });
-
-        tiposDeTurnoUsados.forEach(tipo => {
-            if (!tipo) return; // Ignorar turnos nulos o vacíos
-
-            const fila = [empleado.nombre, this.tiposTurno[tipo]?.nombre || tipo];
-            let totalTurnoPeriodo = 0;
-
-            semanasResultados.forEach(semanaRef => {
-                const semanaEmpleado = empleado.resultados.find(s => s.numero === semanaRef.numero);
-                const conteo = semanaEmpleado ? semanaEmpleado.turnos.filter(t => t.turno === tipo).length : 0;
-                fila.push(this._formatearNumeroExcel(conteo));
-                totalTurnoPeriodo += conteo;
-                totalesEmpleado[semanaRef.numero] += conteo;
-            });
-
-            fila.push(this._formatearNumeroExcel(totalTurnoPeriodo));
-            totalesEmpleado.total += totalTurnoPeriodo;
-            dataResumenTurnos.push(fila);
-        });
-
-        // Fila de totales por empleado
-        const filaTotal = [`TOTAL ${empleado.nombre.toUpperCase()}`, ""];
-        semanasResultados.forEach(semanaRef => {
-            filaTotal.push(this._formatearNumeroExcel(totalesEmpleado[semanaRef.numero]));
-        });
-        filaTotal.push(this._formatearNumeroExcel(totalesEmpleado.total));
-        dataResumenTurnos.push(filaTotal);
-        dataResumenTurnos.push([]); // Fila vacía para separar
-    });
-
-    const wsResumenTurnos = XLSX.utils.aoa_to_sheet(dataResumenTurnos);
-    // Ajustar anchos de columna: la primera más ancha, las demás iguales
-    wsResumenTurnos["!cols"] = [
-      { wch: 30 }, // Columna Empleado
-      { wch: 25 }, // Columna Tipo de Turno
-      ...semanasResultados.map(() => ({ wch: 15 })), // Columnas de semanas
-      { wch: 15 }  // Columna Total
-    ];
-    XLSX.utils.book_append_sheet(wb, wsResumenTurnos, "Resumen de Turnos");
-
-    // --- Lógica de Guardado --- Corregido el error de sintaxis aquí
-    const nombreArchivo = `Reporte de Horas - Varios Empleados - ${new Date().toLocaleDateString("es-ES").replace(/\//g, "-")}.xlsx`;
+    const fecha = new Date().toLocaleDateString("es-CO").replace(/\//g, "-");
+    const nombreArchivo = empleados.length === 1 && this.filtroResultados
+      ? `Reporte de Horas - ${empleados[0].nombre} (${empleados[0].documento}) - ${fecha}.xlsx`
+      : `Reporte de Horas - Varios Empleados - ${fecha}.xlsx`;
 
     if (window.electronAPI) {
       try {
-        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "base64" });
+        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "base64", cellStyles: true });
         const result = await window.electronAPI.saveFile({
           data: wbout,
           fileName: nombreArchivo,
         });
         if (result.success) {
           alert(`¡Reporte exportado exitosamente en: ${result.path}`);
-        } else {
-          if (result.message !== "Guardado cancelado por el usuario.") {
-            alert(`Error al guardar: ${result.message}`);
-          }
+        } else if (result.message !== "Guardado cancelado por el usuario.") {
+          alert(`Error al guardar: ${result.message}`);
         }
       } catch (error) {
-        console.error(
-          "Error al invocar el guardado de archivo en Electron:",
-          error
-        );
+        console.error("Error al invocar el guardado de archivo en Electron:", error);
         alert("Ocurrió un error inesperado al intentar exportar.");
       }
     } else {
-      XLSX.writeFile(wb, nombreArchivo);
+      XLSX.writeFile(wb, nombreArchivo, { cellStyles: true });
+      this.mostrarNotificacion(`Excel generado: ${nombreArchivo}`, "success");
     }
   }
 
-  _generarDatosLiquidacionParaExportar() {
-    const data = [];
-    const header = [ "Empleado", "Documento", "Concepto", "Cantidad Horas", "Valor Unitario", "Subtotal" ];
-    data.push(header);
+  /**
+   * Convierte una hoja descrita por construirLibroExcel() en una hoja de SheetJS,
+   * con formatos numéricos y estilos (los estilos requieren xlsx-js-style).
+   */
+  _crearHojaExcel(hoja) {
+    const ws = XLSX.utils.aoa_to_sheet(hoja.filas);
+    ws["!cols"] = hoja.cols.map((wch) => ({ wch }));
+    const rango = XLSX.utils.decode_range(ws["!ref"] || "A1:A1");
+    const borde = { style: "thin", color: { rgb: "D0D7E2" } };
+    const bordes = { top: borde, bottom: borde, left: borde, right: borde };
 
-    this.empleados.forEach(empleado => {
-        if (!empleado.resultados || !empleado.salario || empleado.salario <= 0) return;
+    for (let r = rango.s.r; r <= rango.e.r; r++) {
+      for (let c = rango.s.c; c <= rango.e.c; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        const celda = ws[ref];
+        if (!celda) continue;
+        const estilo = { font: { name: "Calibri", sz: 11 }, alignment: { vertical: "center" } };
 
-        const valorHoraOrdinaria = empleado.salario / 220;
-        const resumenTotal = empleado.resultados.reduce((acc, semana) => {
-            Object.keys(semana.resumen).forEach((key) => {
-                acc[key] = (acc[key] || 0) + semana.resumen[key];
-            });
-            return acc;
-        }, {});
-
-    const conceptos = [
-      {
-        etiqueta: "Recargo Nocturno",
-        horas: resumenTotal.horasNocturnas,
-        porcentaje: this.configuracion.recargoNocturno.porcentaje,
-        tipo: "recargo",
-      },
-      {
-        etiqueta: "Recargo Festivo",
-        horas: resumenTotal.horasFestivas,
-        porcentaje: this.configuracion.recargoFestivo.porcentaje,
-        tipo: "recargo",
-      },
-      {
-        etiqueta: "Recargo Nocturno Festivo",
-        horas: resumenTotal.horasNocturnasFestivas,
-        porcentaje: this.configuracion.recargoNocturnoFestivo.porcentaje,
-        tipo: "recargo",
-      },
-      {
-        etiqueta: "Horas Extras Ordinarias",
-        horas: resumenTotal.extrasOrdinarias,
-        porcentaje: this.configuracion.extraDiurna.porcentaje,
-        tipo: "extra",
-      },
-      {
-        etiqueta: "Horas Extras Nocturnas",
-        horas: resumenTotal.extrasNocturnas,
-        porcentaje: this.configuracion.extraNocturna.porcentaje,
-        tipo: "extra",
-      },
-      {
-        etiqueta: "Horas Extras Festivas",
-        horas: resumenTotal.extrasFestivas,
-        porcentaje: this.configuracion.extraDiurnaFestiva.porcentaje,
-        tipo: "extra",
-      },
-      {
-        etiqueta: "Horas Extras Nocturnas Festivas",
-        horas: resumenTotal.extrasNocturnasFestivas,
-        porcentaje: this.configuracion.extraNocturnaFestiva.porcentaje,
-        tipo: "extra",
-      },
-    ];
-
-        let totalAPagarEmpleado = 0;
-
-        const filas = conceptos
-            .filter((c) => c.horas > 0)
-            .map((c) => {
-                let valorUnitario, subtotal;
-                if (c.tipo === "recargo") {
-                    valorUnitario = valorHoraOrdinaria * (c.porcentaje / 100);
-                } else { // 'extra'
-                    valorUnitario = valorHoraOrdinaria * (1 + c.porcentaje / 100);
-                }
-                subtotal = c.horas * valorUnitario;
-                totalAPagarEmpleado += subtotal;
-                return [
-                    empleado.nombre,
-                    empleado.documento,
-                    c.etiqueta,
-                    this._formatearNumeroExcel(c.horas),
-                    valorUnitario, // Dejar como número para que Excel lo formatee
-                    subtotal     // Dejar como número para que Excel lo formatee
-                ];
-            });
-
-        if (filas.length > 0) {
-            data.push(...filas);
-            const footer = ["", "", `TOTAL ${empleado.nombre.toUpperCase()}`, "", "", totalAPagarEmpleado]; // Dejar como número
-            data.push(footer);
-            data.push([]); // Separador
+        if (celda.t === "n") {
+          const formato = hoja.formatos?.[c] || "0.00";
+          celda.z = formato;
+          estilo.numFmt = formato;
+          estilo.alignment.horizontal = "right";
         }
+        if (hoja.encabezados?.includes(r)) {
+          estilo.font = { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } };
+          estilo.fill = { patternType: "solid", fgColor: { rgb: "1F3A5F" } };
+          estilo.alignment = { vertical: "center", horizontal: "center", wrapText: true };
+        } else if (hoja.totales?.includes(r)) {
+          estilo.font = { name: "Calibri", sz: 11, bold: true };
+          estilo.fill = { patternType: "solid", fgColor: { rgb: "E8EEF6" } };
+        }
+        const relleno = hoja.rellenos?.find((x) => x.r === r && x.c === c);
+        if (relleno) {
+          const color = relleno.color.replace("#", "").toUpperCase();
+          const texto = this.calcularEstilosDeColor(relleno.color).text.replace("#", "").toUpperCase();
+          estilo.fill = { patternType: "solid", fgColor: { rgb: color } };
+          estilo.font = { ...estilo.font, color: { rgb: texto === "FFFFFF" ? "FFFFFF" : "1E293B" } };
+        }
+        if (!hoja.sinBordes?.includes(r)) estilo.border = bordes;
+        celda.s = estilo;
+      }
+    }
+    if (hoja.congelarFilas) {
+      ws["!freeze"] = { xSplit: 0, ySplit: hoja.congelarFilas };
+      ws["!views"] = [{ state: "frozen", ySplit: hoja.congelarFilas }];
+    }
+    return ws;
+  }
+
+  /**
+   * Construye el contenido de todas las hojas del Excel a partir de los resultados
+   * calculados. No depende del DOM ni de la librería XLSX (se prueba en Node).
+   * @returns {{hojas: Array<{nombre, filas, cols, encabezados, totales, formatos, rellenos}>}}
+   */
+  construirLibroExcel() {
+    const empleados = this._empleadosEnResultados().filter((e) => e.resultados);
+    const hojas = [];
+
+    // 1. Informe de horas extras (formato de importación a nómina)
+    const informe = this._generarDatosInformeHorasExtras();
+    hojas.push({
+      nombre: "Informe Horas Extras",
+      filas: informe.data,
+      cols: informe.cols.map((c) => c.wch),
+      encabezados: [0, 1],
+      totales: [informe.data.length - 1],
+      formatos: {},
+      rellenos: informe.rellenos,
+      congelarFilas: 2,
     });
 
-    if (data.length === 1) { // Solo el header
-        return [["No hay datos de liquidación para exportar."]];
-    }
-    // Formatear los números a string para la visualización final en Excel
-    return data.map(row => row.map(cell => {
-        if (typeof cell === 'number') {
-            return cell.toLocaleString('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
-        }
-        return cell;
-    }));
+    // 2. Novedades de nómina: días de incapacidad, vacaciones, permisos y demás conceptos
+    hojas.push(this._generarHojaNovedades(empleados));
 
+    // 3. Liquidación de pago
+    hojas.push(this._generarHojaLiquidacion(empleados));
+
+    // 4. Resumen total del período por empleado
+    hojas.push(this._generarHojaResumenTotal(empleados));
+
+    // 5. Una hoja por semana
+    this._generarHojasSemanales(empleados).forEach((h) => hojas.push(h));
+
+    // 6. Conteo de turnos por tipo y semana
+    hojas.push(this._generarHojaResumenTurnos(empleados));
+
+    return { hojas };
   }
 
+  _tipoDiaTexto(turno) {
+    if (turno.esDomingo) return "Domingo";
+    if (turno.esFestivo) return "Festivo";
+    return "Hábil";
+  }
+
+  _colorTurno(codigo) {
+    return this.obtenerColorTurno(codigo)?.bg || this.tiposTurno[codigo]?.color || "#9e9e9e";
+  }
+
+  _generarHojaNovedades(empleados) {
+    const filas = [[
+      "Documento", "Nombre", "Fecha", "Día", "Tipo de día", "Código", "Concepto",
+      "Horas configuradas", "Horas sumadas al tope", "Horas que cubren deuda", "Observación",
+    ]];
+    const rellenos = [];
+    empleados.forEach((emp) => {
+      emp.resultados.forEach((semana) => {
+        semana.turnos.forEach((t) => {
+          if (!this.configuracion.tiposTurnoEspeciales?.[t.turno]) return;
+          const config = this.configuracion.tiposTurnoEspeciales[t.turno];
+          const comportamiento = this._obtenerComportamientoConceptoEspecial(t.turno);
+          const sumadas = (t.horasIncapacidad || 0) + (t.horasVacaciones || 0);
+          let observacion = "";
+          if (comportamiento === "suma_tope") {
+            if (t.esDomingo || t.esFestivo) observacion = "Domingo/festivo: no suma al tope";
+            else if (!semana.semanaConTurnoReal) observacion = "Semana sin turno trabajado: no suma al tope";
+            else observacion = "Suma al acumulado de 42 h";
+          } else if (comportamiento === "cubre_deuda") observacion = "Solo cubre horas faltantes";
+          else if (comportamiento === "resta") observacion = "Resta del acumulado semanal";
+          else if (comportamiento === "reduce_tope") observacion = t.esDomingo ? "Domingo: no reduce el tope" : "Reduce el tope semanal";
+          if (t.enRango === false) observacion += " (día fuera del período)";
+
+          rellenos.push({ r: filas.length, c: 6, color: this._colorTurno(t.turno) });
+          filas.push([
+            emp.documento,
+            emp.nombre,
+            t.fecha.toLocaleDateString("es-CO"),
+            t.dia,
+            this._tipoDiaTexto(t),
+            t.turno,
+            config.nombre || t.turno,
+            Number(config.horas) || 0,
+            this._redondearHoras(sumadas),
+            t.horasEquivalentesTope || 0,
+            observacion,
+          ]);
+        });
+      });
+    });
+    if (filas.length === 1) filas.push(["Sin novedades en el período."]);
+    return {
+      nombre: "Novedades de Nómina",
+      filas,
+      cols: [14, 28, 12, 11, 12, 8, 22, 12, 12, 12, 40],
+      encabezados: [0],
+      totales: [],
+      formatos: {},
+      rellenos,
+      congelarFilas: 1,
+    };
+  }
+
+  _generarHojaLiquidacion(empleados) {
+    const filas = [["Empleado", "Documento", "Concepto", "Cantidad Horas", "Valor Unitario", "Subtotal"]];
+    const totales = [];
+    empleados.forEach((emp) => {
+      if (!emp.salario || emp.salario <= 0) return;
+      const liq = this.calcularLiquidacionEmpleado(emp);
+      if (!liq.conceptos.length) {
+        filas.push([emp.nombre, emp.documento, "Sin recargos ni extras en el período", 0, 0, 0]);
+      }
+      liq.conceptos.forEach((c) => {
+        filas.push([emp.nombre, emp.documento, c.etiqueta, this._redondearHoras(c.horas), Math.round(c.valorUnitario), Math.round(c.subtotal)]);
+      });
+      totales.push(filas.length);
+      filas.push(["", "", `TOTAL ${emp.nombre.toUpperCase()}`, "", "", Math.round(liq.total)]);
+      filas.push([]);
+    });
+    if (filas.length === 1) filas.push(["No hay datos de liquidación para exportar."]);
+    return {
+      nombre: "Liquidación de Pago",
+      filas,
+      cols: [30, 14, 34, 15, 18, 18],
+      encabezados: [0],
+      totales,
+      formatos: { 3: "0.00", 4: '"$"#,##0', 5: '"$"#,##0' },
+      rellenos: [],
+      sinBordes: filas.map((f, i) => (f.length === 0 ? i : -1)).filter((i) => i >= 0),
+      congelarFilas: 1,
+    };
+  }
+
+  _generarHojaResumenTotal(empleados) {
+    const conf = this.configuracion;
+    const filas = [["Empleado", "Documento", "Concepto", "Total Horas"]];
+    const totales = [];
+    empleados.forEach((emp) => {
+      const r = this.calcularResumenPeriodo(emp);
+      filas.push(
+        [emp.nombre, emp.documento, "Horas Ordinarias", r.horasOrdinarias],
+        ["", "", `Recargo Nocturno (${conf.recargoNocturno.porcentaje}%)`, r.horasNocturnas],
+        ["", "", `Recargo Festivo (${conf.recargoFestivo.porcentaje}%)`, r.horasFestivas],
+        ["", "", `Recargo Noc. Festivo (${conf.recargoNocturnoFestivo.porcentaje}%)`, r.horasNocturnasFestivas],
+        ["", "", `Extra Ordinaria (${conf.extraDiurna.porcentaje}%)`, r.extrasOrdinarias],
+        ["", "", `Extra Nocturna (${conf.extraNocturna.porcentaje}%)`, r.extrasNocturnas],
+        ["", "", `Extra Festiva (${conf.extraDiurnaFestiva.porcentaje}%)`, r.extrasFestivas],
+        ["", "", `Extra Noc. Festiva (${conf.extraNocturnaFestiva.porcentaje}%)`, r.extrasNocturnasFestivas],
+        ["", "", "Horas reconocidas por incapacidad (suman al tope)", r.horasIncapacidad],
+        ["", "", "Horas reconocidas por vacaciones (suman al tope)", r.horasVacaciones],
+      );
+      totales.push(filas.length, filas.length + 1);
+      filas.push(
+        ["", "", "TOTAL HORAS TRABAJADAS", r.totalHoras],
+        ["", "", "TOTAL HORAS FALTANTES", r.horasDeuda],
+        []
+      );
+    });
+    return {
+      nombre: "Resumen Total Horas",
+      filas,
+      cols: [30, 14, 48, 14],
+      encabezados: [0],
+      totales,
+      formatos: { 3: "0.00" },
+      rellenos: [],
+      sinBordes: filas.map((f, i) => (f.length === 0 ? i : -1)).filter((i) => i >= 0),
+      congelarFilas: 1,
+    };
+  }
+
+  _generarHojasSemanales(empleados) {
+    const porSemana = new Map();
+    empleados.forEach((emp) => {
+      emp.resultados.forEach((semana) => {
+        if (!porSemana.has(semana.numero)) porSemana.set(semana.numero, []);
+        porSemana.get(semana.numero).push({ emp, semana });
+      });
+    });
+
+    const categorias = [
+      "horasOrdinarias", "horasNocturnas", "horasFestivas", "horasNocturnasFestivas",
+      "extrasOrdinarias", "extrasNocturnas", "extrasFestivas", "extrasNocturnasFestivas",
+    ];
+    const totalCategorias = (obj) => this._redondearHoras(categorias.reduce((acc, k) => acc + (obj[k] || 0), 0));
+
+    return Array.from(porSemana.keys()).sort((a, b) => a - b).map((numero) => {
+      const filas = [[
+        "Empleado", "Documento", "Día", "Fecha", "Tipo de día", "En período", "Turno",
+        "H. Ord.", "H. Noc.", "H. Fest.", "H. N.F.", "E. Ord.", "E. Noc.", "E. Fest.", "E. N.F.",
+        "Horas x Turno", "Inc./Vac. al tope",
+      ]];
+      const totales = [];
+      const rellenos = [];
+      porSemana.get(numero).forEach(({ emp, semana }) => {
+        semana.turnos.forEach((t) => {
+          rellenos.push({ r: filas.length, c: 6, color: this._colorTurno(t.turno) });
+          filas.push([
+            emp.nombre,
+            emp.documento,
+            t.dia,
+            t.fecha.toLocaleDateString("es-CO"),
+            this._tipoDiaTexto(t),
+            t.enRango === false ? "No" : "Sí",
+            this.formatearNombreYHorarioTexto(t.turno),
+            ...categorias.map((k) => t[k] || 0),
+            totalCategorias(t),
+            this._redondearHoras((t.horasIncapacidad || 0) + (t.horasVacaciones || 0)),
+          ]);
+        });
+        const r = semana.resumen;
+        totales.push(filas.length);
+        filas.push([
+          `TOTAL ${emp.nombre.toUpperCase()}`, emp.documento, "", "", "", "", `Tope: ${semana.horasMaximas} h`,
+          ...categorias.map((k) => r[k] || 0),
+          totalCategorias(r),
+          this._redondearHoras((r.horasIncapacidad || 0) + (r.horasVacaciones || 0)),
+        ]);
+        if (r.horasDeuda > 0) {
+          totales.push(filas.length);
+          filas.push(["", "", "", "", "", "", "Horas faltantes en la semana", "", "", "", "", "", "", "", "", r.horasDeuda, ""]);
+        }
+        filas.push([]);
+      });
+      return {
+        nombre: `Semana ${numero}`,
+        filas,
+        cols: [28, 13, 11, 11, 11, 9, 30, 8, 8, 8, 8, 8, 8, 8, 8, 12, 13],
+        encabezados: [0],
+        totales,
+        formatos: {},
+        rellenos,
+        sinBordes: filas.map((f, i) => (f.length === 0 ? i : -1)).filter((i) => i >= 0),
+        congelarFilas: 1,
+      };
+    });
+  }
+
+  _generarHojaResumenTurnos(empleados) {
+    const numerosSemana = [...new Set(empleados.flatMap((e) => e.resultados.map((s) => s.numero)))].sort((a, b) => a - b);
+    const filas = [["Empleado", "Tipo de Turno", ...numerosSemana.map((n) => `Semana ${n}`), "Total Período"]];
+    const totales = [];
+    const rellenos = [];
+    empleados.forEach((emp) => {
+      const tipos = [...new Set(emp.resultados.flatMap((s) => s.turnos.map((t) => t.turno)))].filter(Boolean);
+      const totalPorSemana = Object.fromEntries(numerosSemana.map((n) => [n, 0]));
+      let totalGeneral = 0;
+      tipos.forEach((tipo) => {
+        const fila = [emp.nombre, this.tiposTurno[tipo]?.nombre || tipo];
+        let totalTipo = 0;
+        numerosSemana.forEach((n) => {
+          const semana = emp.resultados.find((s) => s.numero === n);
+          const conteo = semana ? semana.turnos.filter((t) => t.turno === tipo).length : 0;
+          fila.push(conteo);
+          totalTipo += conteo;
+          totalPorSemana[n] += conteo;
+        });
+        fila.push(totalTipo);
+        totalGeneral += totalTipo;
+        rellenos.push({ r: filas.length, c: 1, color: this._colorTurno(tipo) });
+        filas.push(fila);
+      });
+      totales.push(filas.length);
+      filas.push([`TOTAL ${emp.nombre.toUpperCase()}`, "", ...numerosSemana.map((n) => totalPorSemana[n]), totalGeneral]);
+      filas.push([]);
+    });
+    return {
+      nombre: "Resumen de Turnos",
+      filas,
+      cols: [30, 25, ...numerosSemana.map(() => 11), 13],
+      encabezados: [0],
+      totales,
+      formatos: Object.fromEntries([...numerosSemana.map((_, i) => [i + 2, "0"]), [numerosSemana.length + 2, "0"]]),
+      rellenos,
+      sinBordes: filas.map((f, i) => (f.length === 0 ? i : -1)).filter((i) => i >= 0),
+      congelarFilas: 1,
+    };
+  }
+
+  /**
+   * Número para Excel: vacío si es 0, redondeado a 2 decimales en otro caso.
+   */
   _formatearNumeroExcel(num) {
     if (num === 0 || !num) {
       return "";
     }
-    // Convierte a número con máximo 2 decimales para redondear correctamente
-    const numeroRedondeado = parseFloat(num.toFixed(2));
-    // Convierte a string (que elimina ceros finales) y reemplaza el punto por la coma
-    return numeroRedondeado.toString().replace('.', ',');
+    return Math.round(num * 100) / 100;
   }
 
-
+  /**
+   * Hoja "Informe Horas Extras": una fila por día trabajado o con concepto de nómina.
+   * Conserva el orden de columnas y los códigos de exportación para la importación a nómina.
+   */
   _generarDatosInformeHorasExtras() {
     // Parte 1: Tabla de conceptos
     const header1 = [
-      "Informe Generado:", "", "", "", "", "", "",
+      "Informe Generado:", new Date().toLocaleDateString("es-CO"), "", "", "", "", "",
       "Horas Extras Diurnas",
       "Horas Extras Nocturnas",
       "Horas Recargo Festivo Diurno",
@@ -3955,6 +4471,7 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       "Horas Extra Festivo Diurno",
       "Horas Extra Festivo Nocturno",
       "Horas Recargo Nocturno",
+      "",
     ];
 
     const header2 = [
@@ -3970,13 +4487,18 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
     ];
 
     const data = [];
+    const rellenos = [];
     const totales = {
       extrasOrdinarias: 0, extrasNocturnas: 0, horasFestivas: 0, horasNocturnasFestivas: 0,
       extrasFestivas: 0, extrasNocturnasFestivas: 0, horasNocturnas: 0,
     };
+    const formatHora = (hora) => {
+      if (!hora) return "";
+      const [h, m] = hora.split(":");
+      return `${h}:${m}`;
+    };
 
-    // Parte 3: Filas de datos
-    this.empleados.forEach(empleado => {
+    this._empleadosEnResultados().forEach(empleado => {
         if (!empleado.resultados) return;
         empleado.resultados.forEach(semana => {
             semana.turnos.forEach(turno => {
@@ -3988,56 +4510,43 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
                 // Incluir filas con horas trabajadas y también los días con concepto especial
                 // (I, PR, V, A, SC...) para que sus fechas queden en el informe aunque no sumen horas.
                 const esTurnoEspecial = this.configuracion.tiposTurnoEspeciales[turno.turno];
-                if (totalHorasTurno > 0 || esTurnoEspecial) {
-                    const formatHora = (hora) => {
-                        if (!hora) return "";
-                        const [h, m] = hora.split(":");
-                        return `${h}:${m}`;
-                    };
+                if (!(totalHorasTurno > 0 || esTurnoEspecial)) return;
 
-                    let horarioEntrada = formatHora(turno.inicio);
-                    let horarioSalida = formatHora(turno.fin);
+                let horarioEntrada = formatHora(turno.inicio);
+                const horarioSalida = formatHora(turno.fin);
 
-                    // Si es un concepto especial (sin horario de entrada/salida), muestra el nombre del concepto.
-                    if (esTurnoEspecial && !turno.inicio && turno.turno !== 'M') {
-                        horarioEntrada = this.tiposTurno[turno.turno]?.nombre || turno.turno;
-                    }
-
-                    const tipoTurnoNombre = this.tiposTurno[turno.turno]?.nombre || turno.turno;
-
-                    const fila = [
-                        empleado.documento,
-                        empleado.nombre,
-                        turno.fecha.toLocaleDateString('es-CO'),
-                        tipoTurnoNombre,
-                        horarioEntrada,
-                        horarioSalida,
-                        this._formatearNumeroExcel(totalHorasTurno),
-                        this._formatearNumeroExcel(turno.extrasOrdinarias),
-                        this._formatearNumeroExcel(turno.extrasNocturnas),
-                        this._formatearNumeroExcel(turno.horasFestivas),
-                        this._formatearNumeroExcel(turno.horasNocturnasFestivas),
-                        this._formatearNumeroExcel(turno.extrasFestivas),
-                        this._formatearNumeroExcel(turno.extrasNocturnasFestivas),
-                        this._formatearNumeroExcel(turno.horasNocturnas),
-                        turno.dia
-                    ];
-                    data.push(fila);
-
-                    // Acumular totales
-                    totales.extrasOrdinarias += turno.extrasOrdinarias || 0;
-                    totales.extrasNocturnas += turno.extrasNocturnas || 0;
-                    totales.horasFestivas += turno.horasFestivas || 0;
-                    totales.horasNocturnasFestivas += turno.horasNocturnasFestivas || 0;
-                    totales.extrasFestivas += turno.extrasFestivas || 0;
-                    totales.extrasNocturnasFestivas += turno.extrasNocturnasFestivas || 0;
-                    totales.horasNocturnas += turno.horasNocturnas || 0;
+                // Si es un concepto especial (sin horario de entrada/salida), muestra el nombre del concepto.
+                if (esTurnoEspecial && !turno.inicio && turno.turno !== 'M') {
+                    horarioEntrada = this.tiposTurno[turno.turno]?.nombre || turno.turno;
                 }
+
+                const tipoTurnoNombre = this.tiposTurno[turno.turno]?.nombre || turno.turno;
+
+                rellenos.push({ r: data.length + 2, c: 3, color: this._colorTurno(turno.turno) });
+                data.push([
+                    empleado.documento,
+                    empleado.nombre,
+                    turno.fecha.toLocaleDateString('es-CO'),
+                    tipoTurnoNombre,
+                    horarioEntrada,
+                    horarioSalida,
+                    this._formatearNumeroExcel(totalHorasTurno),
+                    this._formatearNumeroExcel(turno.extrasOrdinarias),
+                    this._formatearNumeroExcel(turno.extrasNocturnas),
+                    this._formatearNumeroExcel(turno.horasFestivas),
+                    this._formatearNumeroExcel(turno.horasNocturnasFestivas),
+                    this._formatearNumeroExcel(turno.extrasFestivas),
+                    this._formatearNumeroExcel(turno.extrasNocturnasFestivas),
+                    this._formatearNumeroExcel(turno.horasNocturnas),
+                    turno.dia
+                ]);
+
+                Object.keys(totales).forEach((k) => { totales[k] += turno[k] || 0; });
             });
         });
     });
 
-    // Parte 4: Fila de totales
+    // Fila de totales
     const footer = [
       "", "", "", "", "", "", "TOTALES:",
       this._formatearNumeroExcel(totales.extrasOrdinarias),
@@ -4050,11 +4559,26 @@ obtenerHorasTrabajadasSemanaCompleta(semana, empleado) {
       ""
     ];
 
-    const cols = [ {wch: 15}, {wch: 30}, {wch: 12}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 10}, {wch: 12} ];
+    const cols = [ {wch: 15}, {wch: 30}, {wch: 12}, {wch: 20}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 12}, {wch: 12}, {wch: 14}, {wch: 14}, {wch: 14}, {wch: 14}, {wch: 12}, {wch: 12} ];
 
-    return { data: [header1, header2, ...data, footer], cols };
+    return { data: [header1, header2, ...data, footer], cols, rellenos };
   }
 }
+
+// Colores identificativos que los conceptos base conservan siempre
+SistemaTurnosMejorado.COLORES_CONCEPTOS_FIJOS = Object.freeze({
+  I: "#1E88E5",  // Incapacidad: azul
+  SC: "#9E9E9E", // Sin contrato: gris
+  PR: "#9CCC65", // Permiso remunerado: verde claro
+  A: "#E53935",  // Ausencia: rojo
+  V: "#2E7D32",  // Vacaciones: verde
+});
+
+// Turnos base que no se pueden eliminar ni desactivar
+SistemaTurnosMejorado.TURNOS_PROTEGIDOS = Object.freeze(["D", "N", "24T"]);
+
+// Contraseña del módulo de configuración (solo frontend: no es seguridad real)
+SistemaTurnosMejorado.CLAVE_CONFIGURACION = "Alejostone";
 
 // Exponer la clase en `window` para entornos donde el scope no la establece automáticamente (tests, runners)
 if (typeof window !== 'undefined') {
@@ -4066,7 +4590,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const hasUI = document.getElementById('seccion-configuracion') || document.getElementById('contenedor-semanas') || document.getElementById('app');
   if (hasUI) {
     try {
-      new SistemaTurnosMejorado();
+      // Instancia accesible para soporte y pruebas de extremo a extremo
+      window.sistemaTurnos = new SistemaTurnosMejorado();
     } catch (e) {
       console.error('No se pudo inicializar la aplicación automáticamente:', e);
     }

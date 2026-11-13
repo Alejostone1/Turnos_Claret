@@ -4,9 +4,9 @@ Documentación oficial para operación funcional, mantenimiento técnico y despl
 
 | Campo | Valor |
 |---|---|
-| **Versión del sistema** | 4.8 |
-| **Versión del documento** | 2.1 |
-| **Fecha** | Octubre 2026 |
+| **Versión del sistema** | 5.0 |
+| **Versión del documento** | 3.0 |
+| **Fecha** | Noviembre 2026 |
 | **Autor** | Alejostone |
 | **Empresa / titular** | Alejostone |
 | **Repositorio** | `Alejostone1/Turnos_Claret` |
@@ -34,17 +34,18 @@ El sistema permite programar turnos por empleado y calcular automáticamente rec
 
 ## 2. Características Principales
 
-- Programación de turnos por día y por empleado.
-- Turnos dinámicos (código, nombre, color, horario, estado).
+- Programación de turnos por día y por empleado con selector visual de tarjetas (turnos y conceptos de nómina separados).
+- Turnos dinámicos: crear, editar, desactivar y **eliminar** (con limpieza real de referencias).
 - Turno manual por día específico.
 - Configuración de alimentación (sin, predefinida, personalizada).
-- Motor de cálculo minuto a minuto.
-- Clasificación automática de ordinarias/nocturnas/festivas/extras.
-- Tope semanal de 42 h y distribución de extras.
-- Conceptos especiales (incapacidad, permiso, vacaciones, ausencia, sin contrato) con reglas propias frente al tope y la deuda.
-- Configuración de recargos y códigos de exportación.
+- Motor de cálculo minuto a minuto con clasificación **cronológica** al cruzar el tope.
+- Tope semanal de 42 h; incapacidad y vacaciones suman 7,33 h según reglas (ver 10.2).
+- Colores fijos para Incapacidad, Sin contrato, Permiso, Ausencia y Vacaciones.
+- Pre-guardado persistente: la programación se recupera al recargar la página.
+- Resultados **individuales** por empleado y resultados generales.
+- Configuración del sistema protegida con contraseña.
 - Liquidación por concepto.
-- Exportación a Excel.
+- Exportación a Excel (general o individual) con hoja de novedades de nómina.
 
 ---
 
@@ -56,12 +57,12 @@ El sistema permite programar turnos por empleado y calcular automáticamente rec
 | **Configuración de turnos** | Administra turnos base y dinámicos. |
 | **Configuración de alimentación** | Define descuento no laborado. |
 | **Programación** | Asignación diaria en calendario semanal. |
-| **Empleados** | Alta/edición/eliminación y pre-guardado. |
-| **Resultados semanales** | Detalle por día y tipo de hora. |
+| **Empleados** | Alta (documento solo numérico), edición, eliminación y pre-guardado persistente. |
+| **Resultados** | Individuales por empleado o generales; detalle por día y tipo de hora. |
 | **Resumen del período** | Consolidado por empleado. |
 | **Liquidación** | Cálculo monetario de recargos/extras. |
 | **Exportación** | Generación de archivo Excel multihoja. |
-| **Configuración del sistema** | Recargos, horario nocturno y conceptos de nómina. |
+| **Configuración del sistema** | Recargos, horario nocturno y conceptos de nómina (protegida con contraseña). |
 
 ---
 
@@ -80,7 +81,7 @@ El sistema permite programar turnos por empleado y calcular automáticamente rec
 | Proceso principal Electron | `archivos/main.js` | ❌ | ✅ |
 | Preload Electron | `archivos/preload.js` | ❌ | ✅ |
 | Config NPM Electron | `archivos/package.json` | ❌ | ✅ |
-| Escenarios de prueba | `test/*` | ✅ (manual) | ✅ (manual) |
+| Pruebas automáticas | `test/*.js` | Node.js | Node.js |
 
 ## 4.2 Funciones incompatibles con Vercel (y alternativa)
 
@@ -127,6 +128,8 @@ El sistema ya tiene fallback: si `window.electronAPI` no existe, exporta el Exce
 │   ├── package.json
 │   └── ...
 └── test/
+    ├── entorno_prueba.js
+    ├── test_motor.js
     ├── test_conceptos.js
     ├── test_runner.html
     ├── turnos_scenarios.js
@@ -164,7 +167,8 @@ flowchart TD
   A[Configurar datos iniciales] --> B[Configurar turnos y alimentación]
   B --> C[Agregar empleados]
   C --> D[Programar turnos]
-  D --> E[Calcular resultados]
+  D --> P[Pre-guardar]
+  P --> E[Ver resultados individuales o generales]
   E --> F[Revisar resumen y liquidación]
   F --> G[Exportar Excel]
 ```
@@ -214,27 +218,33 @@ Valor hora ordinaria = salario mensual / 220
 
 ### 10.1 Tope semanal y horas extras
 
-- El tope base es **42 horas por semana**.
-- Los días se recorren en orden (domingo → sábado) llevando un **acumulado de horas trabajadas**.
-- Cuando el acumulado supera el tope, las horas restantes se clasifican como **extras** (diurnas, nocturnas o festivas según el minuto en que ocurren).
-- **Solo las horas realmente trabajadas** (turnos dinámicos y turno manual) suman al acumulado.
+- El tope base es **42 horas por semana** (domingo a sábado). El acumulado se reinicia cada domingo.
+- Los días se recorren en orden llevando un **acumulado semanal**. Suman: horas realmente trabajadas (turnos dinámicos y manual) y las horas reconocidas de incapacidad/vacaciones (10.2).
+- Cada minuto trabajado se clasifica **cronológicamente**: lo anterior al instante en que se alcanza el tope es ordinario; lo posterior es extra, con la naturaleza (diurna/nocturna, hábil/festiva) del momento en que ocurre.
 - Los festivos no trabajados **no reducen** el tope.
 - Domingo trabajado sin ningún día libre (`C`) en la semana: sus horas se liquidan como extras.
 
 ### 10.2 Conceptos especiales
 
-Los conceptos especiales **no son horas trabajadas**: nunca generan horas ordinarias, extras ni recargos. Cada uno tiene un efecto distinto sobre el cálculo semanal:
+Los conceptos especiales **no son horas trabajadas**: nunca generan horas ordinarias, extras ni recargos por sí mismos.
 
-| Concepto | Código | ¿Suma para extras? | Efecto |
-|---|---|---|---|
-| Incapacidad | `I` | ❌ No | Solo **cubre la deuda** semanal con sus horas configuradas (7 h por defecto). |
-| Permiso remunerado | `PR` | ❌ No | Solo **cubre la deuda** semanal. |
-| Vacaciones | `V` | ❌ No | Solo **cubre la deuda** semanal. |
-| Ausencia | `A` | ➖ Resta | Descuenta sus horas del acumulado semanal. |
-| Sin contrato | `SC` | ❌ No | **Reduce el tope** semanal en sus horas, solo de lunes a sábado (el domingo no reduce). |
-| Libre | `C` | ❌ No | Día de descanso, sin efecto en horas. |
+| Concepto | Código | Horas por defecto | Efecto en el tope de 42 h |
+|---|---|---:|---|
+| Incapacidad | `I` | 7,33 | **Suma** al acumulado, excepto domingo y festivo, y solo si la semana tiene al menos un turno trabajado |
+| Vacaciones | `V` | 7,33 | Igual que incapacidad |
+| Permiso remunerado | `PR` | 7 | No suma; solo cubre la deuda semanal |
+| Ausencia | `A` | 7 | Resta sus horas del acumulado |
+| Sin contrato | `SC` | 7 | Reduce el tope en sus horas (lunes a sábado) |
+| Libre | `C` | 0 | Sin efecto |
 
-> **Importante:** I, PR y V **no adelantan las extras**. Antes de octubre de 2026 (commit `38f3550`) estos conceptos sumaban al acumulado y hacían que horas trabajadas reales salieran como extras; esto quedó corregido.
+**Ejemplos** (tope 42 h):
+
+| Semana | Trabajadas | I/V que suman | Extras |
+|---|---:|---:|---:|
+| Dom `I`, Lun `I`, Mar–Jue turnos de 11 h | 33 h | 7,33 h (el domingo no suma) | 0 h (40,33 < 42) |
+| Dom `V`, Lun–Mié `V`, Jue–Sáb turnos de 11 h | 33 h | 21,99 h | 12,99 h (desde el viernes) |
+| Lun–Sáb `I`, sin turnos | 0 h | 0 h (sin turno trabajado) | 0 h |
+| Lun `PR`, Mar–Vie turnos de 11 h | 44 h | 0 h | 2 h |
 
 **Deuda semanal:**
 
@@ -242,28 +252,33 @@ Los conceptos especiales **no son horas trabajadas**: nunca generan horas ordina
 Deuda = máx(0, Tope − (Horas trabajadas + Horas I/PR/V − Horas A))
 ```
 
-**Ejemplo** (tope 42 h, turnos de 8 h):
+Las horas de I/PR/V cubren la deuda excepto en domingo y festivo. Un concepto personalizado cuyo nombre contenga *incapacidad* o *vacaciones* se trata como `I`/`V`; con *permiso remunerado*, como `PR`.
 
-| Semana | Trabajadas | I/PR/V | Extras | Deuda |
-|---|---:|---:|---:|---:|
-| Lun `I`, Mar–Sáb trabajados | 40 h | 7 h | 0 h | 0 h |
-| Lun `V`, Mar `PR`, Mié–Sáb trabajados | 32 h | 14 h | 0 h | 0 h |
-| Lun–Mar `I`, Mié–Vie trabajados | 24 h | 14 h | 0 h | 4 h |
-| Lun–Sáb trabajados | 48 h | 0 h | 6 h | 0 h |
+### 10.3 Exportación a Excel
 
-En la pantalla de resultados, la cabecera de cada semana muestra **"Horas justificadas (I/PR/V, solo deuda)"** para dejar claro que esas horas no cuentan para extras.
+| Hoja | Contenido |
+|---|---|
+| Informe Horas Extras | Formato de importación a nómina (códigos 045, 046, 011, …). Una fila por día trabajado o con concepto |
+| Novedades de Nómina | Fechas de incapacidad, vacaciones, permisos, ausencias y sin contrato, con su efecto en el tope |
+| Liquidación de Pago | Valores por concepto y total por empleado (números con formato moneda) |
+| Resumen Total Horas | Totales del período, incluidas horas reconocidas por I/V |
+| Semana N | Detalle diario, tipo de día y si el día está dentro del período |
+| Resumen de Turnos | Conteo por tipo de turno y semana |
 
-El tipo de comportamiento también se reconoce por el nombre del concepto: un concepto personalizado cuyo nombre contenga *incapacidad*, *vacaciones* o *permiso remunerado* se trata igual que `I`/`PR`/`V`.
+Todo sale de la misma fuente que la pantalla (`calcularResumenPeriodo`, `calcularLiquidacionEmpleado`). En resultado individual se exporta solo ese empleado.
 
-### 10.3 Pruebas automáticas del motor
+### 10.4 Pruebas automáticas
 
-Las reglas de los conceptos especiales y los escenarios de semana completa están cubiertos en `test/test_conceptos.js` (no requiere navegador):
+No requieren navegador:
 
 ```bash
+node test/test_motor.js
 node test/test_conceptos.js
 ```
 
-Ejecute esta prueba después de cualquier cambio en `archivos/TURNOS.js`.
+`test_motor.js` cubre: tope de 42 h, incapacidad/vacaciones (domingo, festivo, semana sin trabajo), clasificación nocturna/festiva, cruces de medianoche, turno de 24 h, alimentación (30 min, 1 h, personalizada), cruce cronológico del tope, eliminación de turnos, pre-guardado y recuperación, resultados individuales, coincidencia Excel = pantalla, validación de documento, contraseña y colores fijos.
+
+Ejecute ambas después de cualquier cambio en `archivos/TURNOS.js`.
 
 ---
 
@@ -339,7 +354,9 @@ No requiere configuración adicional porque `vercel.json` ya está incluido.
 
 - No se publican secretos en esta estructura.
 - Persistencia en navegador vía `localStorage`.
-- Recursos externos CDN: `marked` y `xlsx` (dependen de disponibilidad del CDN).
+- La contraseña de Configuración (`Alejostone`) se valida en el navegador y puede verse en el código fuente: evita cambios accidentales, **no es seguridad real**. Para protección real se requiere un backend con autenticación.
+- La programación pre-guardada vive en el `localStorage` de cada navegador y equipo; no se sincroniza entre equipos.
+- Recursos externos CDN con versión fija: `marked@12.0.2` y `xlsx-js-style@1.2.0` (dependen de disponibilidad del CDN).
 
 > Recomendación técnica: para máxima resiliencia offline en web, migrar esas librerías a archivos locales versionados en `archivos/`.
 
@@ -348,7 +365,7 @@ No requiere configuración adicional porque `vercel.json` ya está incluido.
 ## 16. Buenas Prácticas
 
 1. Configurar turnos y alimentación antes de programar.
-2. Pre-guardar turnos antes de editar períodos.
+2. Pre-guardar cada empleado al terminar su programación.
 3. Validar festivos/domingos antes de liquidar.
 4. Estandarizar códigos de turno/concepto.
 5. Exportar y respaldar Excel al cerrar cálculo.
@@ -360,6 +377,11 @@ No requiere configuración adicional porque `vercel.json` ya está incluido.
 
 - **Autor:** Alejostone
 - **Sistema:** Sistema de Control de Turnos y Horas Extras
-- **Versión:** 4.8
+- **Versión:** 5.0
 - **Repositorio:** `Alejostone1/Turnos_Claret`
 
+---
+
+## 18. Informe de auditoría
+
+El detalle de errores encontrados, cambios y pruebas de la versión 5.0 está en [INFORME_AUDITORIA.md](INFORME_AUDITORIA.md).

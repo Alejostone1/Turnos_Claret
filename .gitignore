@@ -16,3 +16,6 @@ desktop.ini
 # Temporary artifacts
 *.tmp
 *.temp
+
+# Entregables
+*.zip
