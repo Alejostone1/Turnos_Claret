@@ -2,6 +2,12 @@
 
 Documentación oficial para operación funcional, mantenimiento técnico y despliegue web.
 
+| Documento | Para quién |
+|---|---|
+| [Manual de usuario](archivos/instructivo.md) | RR. HH. y nómina: uso paso a paso con capturas y casos especiales. También se abre desde la aplicación. |
+| [Manual del desarrollador](docs/MANUAL_DESARROLLADOR.md) | Soporte técnico: arquitectura, motor de cálculo, datos, pruebas y despliegue. |
+| [Informe de auditoría](INFORME_AUDITORIA.md) | Errores corregidos y cambios de la versión 5.0. |
+
 | Campo | Valor |
 |---|---|
 | **Versión del sistema** | 5.0 |
@@ -77,7 +83,9 @@ El sistema permite programar turnos por empleado y calcular automáticamente rec
 | Motor de UI y cálculo | `archivos/TURNOS.js` | ✅ | ✅ |
 | Estilos | `archivos/TURNOS.css` | ✅ | ✅ |
 | Manual embebido | `archivos/instructivo.js` | ✅ | ✅ |
-| Manual fuente | `archivos/instructivo.md` | ✅ | ✅ |
+| Manual de usuario (fuente) | `archivos/instructivo.md` | ✅ | ✅ |
+| Capturas del manual | `archivos/manual/*.png` | ✅ | ✅ |
+| Manual del desarrollador | `docs/MANUAL_DESARROLLADOR.md` | — | — |
 | Proceso principal Electron | `archivos/main.js` | ❌ | ✅ |
 | Preload Electron | `archivos/preload.js` | ❌ | ✅ |
 | Config NPM Electron | `archivos/package.json` | ❌ | ✅ |

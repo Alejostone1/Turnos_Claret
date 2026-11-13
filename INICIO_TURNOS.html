@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="stylesheet" href="archivos/TURNOS.css?v=202611131600">
+    <link rel="stylesheet" href="archivos/TURNOS.css?v=202611132000">
     <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 </head>
 <body>
@@ -31,6 +31,13 @@
             </div>
             <span class="barra-app-version">Versión 5.0</span>
         </header>
+        <nav class="pasos-app" id="pasos-app" aria-label="Pasos">
+            <ol>
+                <li data-seccion="seccion-configuracion"><span class="paso-num">1</span><span class="paso-texto">Configuración</span></li>
+                <li data-seccion="seccion-turnos"><span class="paso-num">2</span><span class="paso-texto">Programación</span></li>
+                <li data-seccion="seccion-resultados"><span class="paso-num">3</span><span class="paso-texto">Resultados</span></li>
+            </ol>
+        </nav>
 
     <main class="contenido-principal">
             <!-- Sección de Configuración -->
@@ -362,7 +369,7 @@
 
     <!-- Modal para crear / editar un turno -->
     <div id="modal-turno" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-turno">
-        <div class="modal-contenido modal-turno">
+        <div class="modal-contenido modal-turno modal-compacto">
             <div class="modal-header">
                 <h2 id="titulo-modal-turno">Nuevo turno</h2>
                 <button type="button" id="btn-cerrar-modal-turno" class="modal-cerrar" aria-label="Cerrar">&times;</button>
@@ -386,7 +393,7 @@
                     <div class="pc-campo">
                         <label for="turno-fin">Hora de fin</label>
                         <input type="time" id="turno-fin" class="pc-input">
-                        <span class="pc-ayuda">Si el fin es menor que el inicio, el turno termina al día siguiente. Inicio = fin es un turno de 24 h.</span>
+                        <span class="pc-ayuda">Si termina antes de iniciar, pasa al día siguiente.</span>
                     </div>
                 </div>
                 <div class="pc-campo">
@@ -418,46 +425,55 @@
         </div>
     </div>
 
-    <!-- Modal para agregar nuevo empleado -->
-    <div id="modal-agregar-empleado" class="modal-overlay" style="display: none;">
-        <div class="modal-contenido">
+    <!-- Modal para agregar / editar empleado -->
+    <div id="modal-agregar-empleado" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-empleado">
+        <div class="modal-contenido modal-compacto">
             <div class="modal-header">
-                <h2>Agregar Nuevo Empleado</h2>
-                <button id="btn-cerrar-modal" class="modal-cerrar">&times;</button>
+                <div>
+                    <h2 id="titulo-modal-empleado">Agregar empleado</h2>
+                    <p class="modal-subtitulo">Los datos se usan en resultados, liquidación y Excel.</p>
+                </div>
+                <button type="button" id="btn-cerrar-modal" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="config-input-group">
-                    <label for="modal-documento" class="config-label">Número de Documento</label>
-                    <input type="text" id="modal-documento" class="config-input" placeholder="Solo números, sin puntos ni espacios" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="20" aria-describedby="error-documento">
-                    <span id="error-documento" class="mensaje-error-campo" role="alert"></span>
-                </div>
-                <div class="config-input-group">
-                    <label for="modal-nombre" class="config-label">Nombre Completo</label>
-                    <input type="text" id="modal-nombre" class="config-input" placeholder="Nombre del empleado">
-                </div>
-                <div class="config-input-group">
-                    <label for="modal-salario" class="config-label">Salario Mensual</label>
-                    <input type="text" id="modal-salario" class="config-input" placeholder="Salario sin puntos">
-                </div>
-                <div class="date-inputs">
-                    <div class="config-input-group">
-                        <label for="modal-fecha-inicio" class="config-label">Fecha de Inicio</label>
-                        <input type="date" id="modal-fecha-inicio" class="config-input">
+                <div class="pc-campos pc-campos-2">
+                    <div class="pc-campo">
+                        <label for="modal-documento">Documento</label>
+                        <input type="text" id="modal-documento" class="pc-input" placeholder="Solo números" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="20" aria-describedby="error-documento">
+                        <span id="error-documento" class="mensaje-error-campo" role="alert"></span>
                     </div>
-                    <div class="config-input-group">
-                        <label for="modal-fecha-fin" class="config-label">Fecha de Fin</label>
-                        <input type="date" id="modal-fecha-fin" class="config-input">
+                    <div class="pc-campo">
+                        <label for="modal-salario">Salario mensual</label>
+                        <div class="pc-input-prefijo">
+                            <span aria-hidden="true">$</span>
+                            <input type="text" id="modal-salario" class="pc-input" inputmode="numeric" placeholder="1.750.905">
+                        </div>
+                    </div>
+                </div>
+                <div class="pc-campo">
+                    <label for="modal-nombre">Nombre completo</label>
+                    <input type="text" id="modal-nombre" class="pc-input" placeholder="Nombres y apellidos" autocomplete="off">
+                </div>
+                <div class="pc-campos pc-campos-2">
+                    <div class="pc-campo">
+                        <label for="modal-fecha-inicio">Inicio del período</label>
+                        <input type="date" id="modal-fecha-inicio" class="pc-input">
+                    </div>
+                    <div class="pc-campo">
+                        <label for="modal-fecha-fin">Fin del período</label>
+                        <input type="date" id="modal-fecha-fin" class="pc-input">
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button id="btn-confirmar-agregar-empleado" class="boton-principal">Confirmar y Agregar</button>
+            <div class="modal-footer modal-footer-acciones">
+                <button type="button" id="btn-cancelar-modal-empleado" class="pc-boton pc-boton-secundario">Cancelar</button>
+                <button type="button" id="btn-confirmar-agregar-empleado" class="pc-boton pc-boton-primario">Agregar empleado</button>
             </div>
         </div>
     </div>
 
     <script defer src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script defer src="archivos/instructivo.js"></script>
-    <script defer src="archivos/TURNOS.js?v=202611131600"></script>
+    <script defer src="archivos/TURNOS.js?v=202611132000"></script>
 </body>
 </html>

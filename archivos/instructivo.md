@@ -1,398 +1,311 @@
-# Sistema de Control de Turnos y Horas Extras
-## Manual de Usuario y Operación (Versión Profesional)
+# Manual de usuario
+## Control de Turnos y Horas Extras · Versión 5.0
+
+Este manual explica, paso a paso y sin términos técnicos, cómo programar los turnos de los empleados, revisar sus horas extras y recargos, y descargar el informe para nómina.
 
 ---
 
-**Versión del sistema:** 5.0  
-**Versión del manual:** 4.0  
-**Fecha de actualización:** Noviembre 2026  
-**Autor:** Alejostone
+## 1. ¿Qué hace el sistema?
+
+1. Usted indica el **período** (por ejemplo, del 1 al 30 de noviembre).
+2. Agrega a los **empleados**.
+3. Asigna a cada día un **turno** (Día, Noche, 24 horas…) o una **novedad** (incapacidad, vacaciones, permiso…).
+4. El sistema calcula solo las **horas ordinarias, nocturnas, festivas y extras** de cada semana.
+5. Usted descarga un **Excel** listo para nómina.
+
+El trabajo se hace en tres pasos, que siempre verá en la parte superior de la pantalla:
+
+**1 Configuración → 2 Programación → 3 Resultados**
 
 ---
 
-## 1. Propósito del Sistema
+## 2. Antes de empezar
 
-El sistema permite gestionar turnos de trabajo y calcular automáticamente horas y recargos para nómina, con enfoque en:
-
-- Precisión de cálculo (incluye cruces de medianoche).
-- Clasificación correcta y cronológica de horas por tipo.
-- Consolidación semanal y por período.
-- Exportación de resultados y liquidación.
-
-Está diseñado para operación diaria de RR. HH. y nómina, con configuración administrativa centralizada.
+- Abra el sistema con doble clic en **ABRIR SISTEMA DE TURNOS** (o en la dirección web que le hayan dado).
+- Use **Chrome** o **Edge**.
+- Para descargar el Excel necesita **internet**.
+- Lo que guarda queda en **este navegador y este computador**. Si cambia de computador, no verá la programación.
 
 ---
 
-## 2. Alcance Funcional
+## 3. Paso 1 · Configuración
 
-El sistema incluye:
+![Pantalla de configuración inicial](archivos/manual/01-configuracion.png)
 
-1. Configuración inicial de período y salario.
-2. Configuración dinámica de turnos (crear, editar, desactivar y eliminar).
-3. Configuración de alimentación (sin, predefinida, personalizada).
-4. Programación diaria por empleado con selector visual de tarjetas.
-5. Gestión de empleados (agregar, editar, eliminar, pre-guardar).
-6. Pre-guardado persistente: la programación se recupera al recargar la página.
-7. Resultados individuales por empleado y resultados generales.
-8. Cálculo de horas con motor minuto a minuto.
-9. Liquidación monetaria de recargos y horas extra.
-10. Exportación a Excel (general o individual).
-11. Panel de configuración del sistema protegido con contraseña.
+### 3.1 Datos del período
 
----
-
-## 3. Flujo de Uso Recomendado
-
-```text
-Configuración Inicial
-       ↓
-Configurar Turnos + Alimentación
-       ↓
-Agregar Empleados
-       ↓
-Programar Turnos  →  💾 Pre-guardar
-       ↓
-📊 Ver resultados del empleado   (o "Ver Resultados" de todos)
-  ├─ Resultados Semanales
-  ├─ Resumen Total del Período
-  └─ Liquidación de Pago
-       ↓
-Exportar Excel
-```
-
----
-
-## 4. Pantalla de Configuración Inicial
-
-### 4.1 Datos principales
-
-| Campo | Uso |
+| Campo | Qué escribir |
 |---|---|
-| Número de empleados | Cantidad inicial de empleados a registrar |
-| Salario mensual base | Valor de referencia para liquidación |
-| Fecha inicio / fecha fin | Rango del período a trabajar |
+| Número de empleados | Cuántos empleados va a agregar ahora. Después puede agregar más. |
+| Salario mensual base | El salario que aparecerá por defecto al agregar cada empleado. |
+| Fecha de inicio y fin | El período que va a liquidar. Debajo de cada fecha verá qué día de la semana es. |
 
-### 4.2 Comportamiento del período
+> El sistema siempre trabaja con **semanas de domingo a sábado**. Si el período empieza un miércoles, igual verá esa semana completa, porque los días anteriores cuentan para saber cuándo empiezan las extras.
 
-El calendario se organiza por semanas completas **domingo a sábado**, incluso cuando el rango no inicia en domingo o termina en sábado.  
-Esto es intencional y necesario para calcular correctamente extras semanales.
+### 3.2 Turnos
 
-### 4.3 Programación guardada
+Aquí están los turnos que podrá asignar. Vienen tres turnos base:
 
-Si en este navegador hay una programación guardada, aparece un aviso con el número de empleados, el período y la fecha de guardado:
+| Turno | Color |
+|---|---|
+| **D** · Día | Amarillo claro |
+| **N** · Noche | Azul |
+| **24T** · 24 Horas | Violeta |
+
+Cada turno muestra su horario y cuántas **horas efectivas** tiene (ya descontada la alimentación).
+
+#### Crear un turno nuevo
+
+1. Pulse **+ Nuevo turno**.
+2. Escriba el **nombre** (por ejemplo, "Tarde") y un **código** corto (por ejemplo, "TR").
+3. Elija la **hora de inicio** y la **hora de fin**.
+4. Elija un **color**.
+5. Marque si se **descuenta alimentación** en ese turno.
+6. Revise la vista previa de arriba (muestra las horas efectivas) y pulse **Guardar turno**.
+
+![Ventana para crear un turno](archivos/manual/02-nuevo-turno.png)
+
+> Si pulsa **Cancelar**, no se crea nada.
+
+**Consejos:**
+- Si el turno termina al día siguiente (por ejemplo, de 10:00 p. m. a 6:00 a. m.), escríbalo tal cual: el sistema entiende que pasa la medianoche.
+- Si la hora de inicio y la de fin son iguales (por ejemplo, 7:00 a 7:00), es un turno de **24 horas**.
+
+#### Cambiar, desactivar o eliminar un turno
+
+- **Editar:** abre la misma ventana para cambiar nombre, horario, color o alimentación.
+- **Desactivar:** el turno deja de aparecer para asignar, pero no se borra.
+- **Eliminar:** lo borra definitivamente. Si estaba asignado a algún día, el sistema le avisa cuántos días son; esos días quedan como **Libre**.
+- Los turnos base (Día, Noche y 24 Horas) se pueden editar, pero no eliminar.
+
+### 3.3 Alimentación
+
+Elija cómo se descuenta el tiempo de comida:
+
+| Opción | Significa |
+|---|---|
+| Sin descuento | No se descuenta nada. |
+| Tiempo fijo | Se descuentan **30 minutos** o **1 hora**. |
+| Horario | Usted indica el rango (por ejemplo, de 12:00 a 1:00). |
+
+La alimentación se descuenta **al inicio del turno**. Ejemplo: un turno de 7:00 a. m. a 7:00 p. m. con 30 minutos de alimentación da **11,5 horas** efectivas.
+
+En turnos de **24 horas** se descuentan **dos** pausas.
+
+### 3.4 Continuar
+
+Pulse **Continuar a programación**. Se abrirá la ventana para agregar al primer empleado.
+
+---
+
+## 4. Paso 2 · Agregar empleados
+
+![Ventana para agregar un empleado](archivos/manual/03-agregar-empleado.png)
+
+1. **Documento:** solo números, sin puntos ni espacios. Si escribe una letra, el sistema la quita.
+2. **Salario mensual:** viene del dato general; puede cambiarlo.
+3. **Nombre completo.**
+4. **Inicio y fin del período** de este empleado (vienen del período general).
+5. Pulse **Agregar empleado**.
+
+Si indicó varios empleados, la ventana se abre de nuevo para el siguiente. Puede agregar más cuando quiera con **+ Agregar empleado**.
+
+### Lista de empleados
+
+![Lista de empleados](archivos/manual/05-lista-empleados.png)
+
+Cada empleado muestra su período, su **estado** y tres botones:
+
+| Estado | Significa |
+|---|---|
+| Sin turnos | Aún no tiene turnos asignados. |
+| Turnos asignados | Tiene turnos, pero no se han guardado. |
+| Cambios sin guardar | Cambió algo después de guardar. |
+| Guardado | Todo está guardado. |
+
+- **Resultados:** muestra solo los resultados de ese empleado.
+- **Editar:** cambia nombre, salario o fechas **sin perder** los turnos ya puestos.
+- **Eliminar:** borra al empleado y su programación (pide confirmación).
+
+---
+
+## 5. Programar los turnos
+
+![Selector de turnos](archivos/manual/04-selector-turnos.png)
+
+1. Pulse sobre cualquier día.
+2. Se abre un panel con dos grupos:
+   - **Turnos:** Día, Noche, 24 Horas, los que usted creó, **Libre** (C) y **Turno Manual** (M).
+   - **Conceptos de nómina:** Incapacitado, Vacaciones, Permiso remunerado, Ausencia y Sin contrato.
+3. Pulse la tarjeta que corresponde. El día toma el color del turno.
+
+Los días **festivos** muestran la etiqueta **Festivo**.
+
+### Colores de las novedades (siempre iguales)
+
+| Novedad | Color |
+|---|---|
+| Incapacidad | Azul |
+| Vacaciones | Verde |
+| Permiso remunerado | Verde claro |
+| Ausencia | Rojo |
+| Sin contrato | Gris |
+
+### Turno Manual
+
+Úselo cuando un día el empleado trabaja un horario especial. Al elegir **M** aparecen dos campos de hora para ese día.
+
+---
+
+## 6. Guardar y recuperar
+
+Al terminar la programación de un empleado, pulse **Pre-guardar** (debajo de sus semanas). Verá **✔ Guardado** con la fecha y hora.
+
+- Si cambia algo después, verá **● Cambios sin guardar**.
+- Si intenta cerrar la página con cambios sin guardar, el navegador le pregunta antes de salir.
+- Al calcular resultados, el sistema también guarda automáticamente.
+
+### Recuperar una programación
+
+La próxima vez que abra el sistema verá este aviso:
+
+![Aviso de programación guardada](archivos/manual/07-recuperar.png)
 
 - **Continuar programación:** recupera empleados, turnos y alimentación.
-- **Descartar:** borra la programación guardada (pide confirmación).
+- **Descartar:** borra lo guardado (pide confirmación).
 
-### 4.4 Botones disponibles
+---
 
-| Botón | Función |
+## 7. Paso 3 · Resultados
+
+Hay dos formas de verlos:
+
+- **Ver resultados de [nombre]** (o el botón **Resultados** en la lista): solo ese empleado.
+- **Ver Resultados** (abajo de la programación): todos los empleados.
+
+![Resultados de un empleado](archivos/manual/06-resultados.png)
+
+Tiene tres pestañas:
+
+1. **Resultados Semanales:** el detalle de cada día. Arriba de cada semana verá el tope de 42 horas y, si hubo incapacidad o vacaciones, cuántas horas sumaron.
+2. **Resumen Total del Período:** totales del período, incluidas las horas reconocidas por incapacidad y por vacaciones.
+3. **Liquidación de Pago:** el valor en pesos de recargos y extras.
+
+**← Atrás** lo devuelve a la programación sin perder nada.
+
+---
+
+## 8. Descargar el Excel
+
+Pulse **Exportar Resultados** (o **Exportar resultados de [nombre]** si está viendo un solo empleado). El archivo trae estas hojas:
+
+| Hoja | Para qué sirve |
 |---|---|
-| Siguiente | Abre flujo de empleados y programación. Si ya hay empleados, pregunta si desea conservarlos |
-| Limpiar Todo | Borra empleados y programación guardada (pide confirmación) |
-| Configuración | Abre el panel administrativo (pide contraseña) |
-| Manual de Usuario | Abre este documento |
+| Informe Horas Extras | El formato para cargar a nómina, con los códigos de cada concepto. Incluye los días de incapacidad, vacaciones y permisos. |
+| Novedades de Nómina | Todas las fechas de incapacidad, vacaciones, permisos, ausencias y sin contrato, y si sumaron al tope. |
+| Liquidación de Pago | Valores en pesos por concepto. |
+| Resumen Total Horas | Totales del período por empleado. |
+| Semana 1, Semana 2… | El detalle de cada día. |
+| Resumen de Turnos | Cuántos turnos de cada tipo hubo por semana. |
+
+> En el Informe, los días de **incapacidad o vacaciones** muestran **7,33** en "Horas Trabajadas" solo cuando esas horas sumaron al tope de la semana. Es informativo: no se suma a extras ni recargos.
 
 ---
 
-## 5. Configuración de Turnos
+## 9. Cómo se cuentan las horas (en palabras simples)
 
-### 5.1 Turnos base
+- Cada semana (domingo a sábado) tiene un tope de **42 horas ordinarias**.
+- El sistema va sumando las horas **en el orden en que ocurren**. Lo que pase de 42 horas es **extra**.
+- **Horario nocturno:** de **7:00 p. m. a 6:00 a. m.** (se puede cambiar en Configuración del sistema).
+- **Domingos y festivos** generan recargo festivo.
+- Un turno que empieza el sábado y termina el domingo: la parte del domingo cuenta como festiva.
 
-El sistema crea y mantiene como base (marcados con 🔒):
-
-- `D` (Día)
-- `N` (Noche)
-- `24T` (24 horas)
-
-Se pueden **editar** (nombre, horario, color), pero no eliminar ni desactivar.
-
-Colores por defecto: Día amarillo claro, Noche azul, 24 Horas violeta.
-
-### 5.2 Turnos dinámicos
-
-Pulse **+ Nuevo turno**: se abre una ventana para definir nombre, código, horario, color y si descuenta alimentación, con una vista previa de las horas efectivas. El turno **solo se crea al pulsar Guardar turno**; Cancelar no crea nada. Para cambiar un turno existente use **Editar**.
-
-### 5.3 Eliminar un turno
-
-1. Pulse 🗑️ en la tarjeta del turno.
-2. Confirme. El sistema indica en cuántos días está asignado.
-3. El turno desaparece de la configuración, del selector y de lo guardado. Los días que lo tenían quedan como **Libre**.
-
-### 5.4 Reglas de código
-
-- El código debe ser único.
-- No se permiten colisiones con `C` (Libre) ni `M` (Manual).
-- El sistema normaliza a mayúsculas. Si cambia un código, la programación se actualiza al nuevo código.
+Ejemplo: si el viernes, a las 3:00 p. m., el empleado completa 42 horas en la semana, todo lo que trabaje después de esa hora es extra, y será diurna o nocturna según la hora.
 
 ---
 
-## 6. Configuración de Alimentación
+## 10. Casos especiales
 
-| Modo | Descripción |
+### Incapacidad o vacaciones con turnos en la semana
+Cada día de incapacidad o vacaciones suma **7,33 horas** al conteo de la semana, como si hubiera trabajado para efectos del tope. **No** son horas trabajadas ni se pagan como extras.
+
+*Ejemplo:* domingo y lunes incapacitado, martes a jueves turnos de 11 horas.  
+Horas trabajadas: 33. Incapacidad que suma: 7,33 (solo el lunes; el domingo no cuenta).  
+Total: 40,33 → **no hay extras**.
+
+### Incapacidad o vacaciones en domingo o festivo
+Ese día **no suma** horas al conteo de la semana.
+
+### Toda la semana incapacitado o de vacaciones
+Si en la semana **no trabajó ningún turno**, las incapacidades o vacaciones **no suman** horas para extras. Las fechas sí aparecen en el Excel.
+
+### Permiso remunerado
+No suma para extras. Solo evita que la semana aparezca con "horas faltantes".
+
+### Ausencia
+Resta sus horas del conteo de la semana.
+
+### Sin contrato (ingresó o se retiró a mitad de semana)
+Marque con **SC** los días en que no tenía contrato. Cada día de lunes a sábado con SC **baja el tope** de la semana en 7 horas. El domingo con SC no lo baja.
+
+### Trabajó el domingo y no tuvo ningún día libre en la semana
+Las horas de ese domingo se pagan como **extras festivas**.
+
+### El empleado empieza o termina a mitad de semana
+Los días de esa semana que están fuera de su período se ven más claros. Si el empleado trabajó esos días (por ejemplo, en el período anterior), asígnelos igual para que el tope de la semana se calcule bien. En el Excel aparecen como "En período: No".
+
+### Cambié la alimentación después de programar
+Vuelva al Paso 1, cambie la alimentación y pulse **Continuar a programación**. Cuando le pregunte, elija **Cancelar** para **conservar** la programación actual. Luego vuelva a calcular resultados.
+
+### Me equivoqué en el nombre, salario o fechas de un empleado
+Use **Editar** en la lista de empleados. Los turnos ya puestos se conservan.
+
+### Eliminé un turno que estaba asignado
+Los días que lo tenían quedan como **Libre**. Revíselos y asígneles otro turno.
+
+---
+
+## 11. Configuración del sistema (administrador)
+
+El botón **Configuración del sistema** pide una contraseña.
+
+![Contraseña de configuración](archivos/manual/08-clave.png)
+
+Una vez dentro puede cambiar:
+- Los **porcentajes** de recargos y extras.
+- El **horario nocturno**.
+- Las **horas** de cada concepto de nómina.
+- Los **códigos de exportación** del Excel.
+
+![Configuración del sistema](archivos/manual/09-configuracion-sistema.png)
+
+> Mientras la pestaña siga abierta, no vuelve a pedir la contraseña.
+
+---
+
+## 12. Problemas frecuentes
+
+| Problema | Solución |
 |---|---|
-| Sin almuerzo | No hay descuento |
-| Predefinido | 30 min o 1 hora |
-| Personalizado | Rango horario definido por el usuario |
-
-### 6.1 Regla aplicada en cálculo
-
-```text
-Inicio efectivo = inicio programado + tiempo de alimentación
-```
-
-La pausa se descuenta al inicio del turno laborado. Ejemplo: turno de 12 h con 1 h de alimentación = 11 h efectivas.
-
-### 6.2 Turnos de 24 horas
-
-En turnos 24H se aplica una segunda pausa (12 horas después del inicio). Con 30 min: 24 h − 2 × 0,5 h = 23 h.
+| No descarga el Excel | Verifique que tiene internet y que el navegador permite descargas. |
+| No veo un cambio que hice | Recargue con **Ctrl + F5**. |
+| No aparece un turno al asignar | Revise en el Paso 1 que esté activo (no "Inactivo"). |
+| Perdí la programación | Si la había guardado, use **Continuar programación** al abrir. Debe ser el mismo navegador y computador. |
+| El documento no acepta letras | Es correcto: solo se permiten números. |
 
 ---
 
-## 7. Programación de Turnos
+## 13. Palabras clave
 
-### 7.1 Selector visual
-
-Al pulsar el día se abre un panel de tarjetas en dos grupos:
-
-1. **Turnos:** turnos activos, `C` (Libre) y `M` (Manual), con su horario.
-2. **Conceptos de nómina:** Incapacidad, Vacaciones, Permiso, Ausencia, Sin contrato, etc.
-
-La tarjeta seleccionada aparece marcada con ✓. `Esc` o un clic fuera cierra el panel.
-
-### 7.2 Colores fijos de los conceptos
-
-| Concepto | Color |
+| Palabra | Significado |
 |---|---|
-| Incapacidad (I) | Azul |
-| Sin contrato (SC) | Gris |
-| Permiso remunerado (PR) | Verde claro |
-| Ausencia (A) | Rojo |
-| Vacaciones (V) | Verde |
-
-Estos colores no se pueden cambiar y se usan en el selector, el calendario, los resultados y el Excel.
-
-### 7.3 Turno Manual (M)
-
-Permite ingresar inicio y fin solo para ese día. Se calcula con la misma lógica de clasificación y alimentación del resto de turnos.
+| Tope semanal | 42 horas ordinarias por semana. |
+| Hora extra | Hora trabajada después de completar el tope. |
+| Recargo nocturno | Pago adicional por trabajar entre 7:00 p. m. y 6:00 a. m. |
+| Recargo festivo | Pago adicional por trabajar en domingo o festivo. |
+| Horas faltantes | Horas que le faltaron a la semana para llegar al tope. |
+| Novedad | Incapacidad, vacaciones, permiso, ausencia o sin contrato. |
 
 ---
 
-## 8. Gestión de Empleados
-
-### 8.1 Documento
-
-El número de documento **solo admite números**: el campo bloquea letras, espacios y símbolos, y no deja guardar un documento vacío. Se conservan los ceros iniciales.
-
-### 8.2 Acciones por empleado
-
-| Acción | Resultado |
-|---|---|
-| Agregar | Crea empleado con su período propio |
-| ✏️ Editar | Ajusta datos y regenera calendario sin perder turnos |
-| 🗑️ Eliminar | Borra el empleado y su programación (pide confirmación) |
-| 💾 Pre-guardar | Guarda la programación en el navegador |
-| 📊 Ver resultados | Pre-guarda y muestra solo los resultados de ese empleado |
-
-### 8.3 Estado de guardado
-
-Debajo de cada empleado se indica **✔ Guardado (fecha)** o **● Cambios sin guardar**. Si intenta cerrar la página con cambios sin guardar, el navegador pide confirmación.
-
----
-
-## 9. Motor de Cálculo de Horas
-
-El motor clasifica:
-
-- Ordinarias diurnas, nocturnas, festivas y nocturnas festivas.
-- Extras diurnas, nocturnas, festivas y nocturnas festivas.
-
-Cada minuto trabajado se clasifica **en orden cronológico**: el tiempo anterior al instante en que se alcanza el tope es ordinario y el posterior es extra, con la naturaleza (diurna/nocturna, hábil/festiva) del momento en que ocurre.
-
----
-
-## 10. Tope Semanal de 42 horas
-
-### 10.1 Regla
-
-- Tope fijo de **42 horas** por semana (domingo a sábado). El acumulado se reinicia cada domingo.
-- Suman al acumulado: horas realmente trabajadas, e incapacidad y vacaciones según 10.2.
-- No reducen el tope: festivos no trabajados ni domingos.
-- `SC` (Sin contrato) reduce el tope en sus horas por cada día de lunes a sábado.
-- `A` (Ausencia) resta sus horas del acumulado.
-
-### 10.2 Incapacidad y vacaciones
-
-- Aportan sus horas configuradas (por defecto **7,33 h**) al acumulado semanal.
-- **Domingo y festivo no aportan.**
-- Solo aportan si en esa semana hay **al menos un turno realmente trabajado**. Una semana completa de incapacidad o vacaciones no genera horas para extras.
-- No son horas trabajadas: nunca generan horas ordinarias ni extras por sí mismas.
-
-Ejemplo: domingo y lunes de incapacidad, martes a jueves turnos de 11 h → 33 h + 7,33 h = 40,33 h → **0 extras**.
-
-### 10.3 Permiso remunerado
-
-`PR` no suma al acumulado de extras; solo cubre horas faltantes de la semana.
-
-### 10.4 Horas faltantes (deuda)
-
-```text
-Deuda = máx(0, Tope − (Horas trabajadas + Horas I/PR/V − Horas A))
-```
-
-Las horas de I/PR/V cuentan para la deuda excepto en domingo y festivo.
-
-### 10.5 Domingo sin descanso
-
-Si se trabaja el domingo y no hay día libre en la semana, las horas del domingo se liquidan como extras festivas.
-
----
-
-## 11. Festivos y Domingos
-
-- El domingo siempre se considera festivo.
-- El sistema incluye los festivos de Colombia 2025–2027.
-- La celda del calendario se resalta cuando el día es festivo.
-
----
-
-## 12. Conceptos de Nómina
-
-| Código | Concepto | Horas por defecto | Efecto |
-|---|---|---:|---|
-| C | Libre | 0 | Ninguno |
-| I | Incapacitado | 7,33 | Suma al tope (10.2) |
-| V | Vacaciones | 7,33 | Suma al tope (10.2) |
-| PR | Permiso remunerado | 7 | Solo cubre deuda |
-| A | Ausencia | 7 | Resta del acumulado |
-| SC | Sin contrato | 7 | Reduce el tope (lun–sáb) |
-
-Los conceptos base no se pueden eliminar. Un concepto nuevo cuyo nombre contenga *incapacidad* o *vacaciones* se comporta como I/V; con *permiso remunerado*, como PR.
-
----
-
-## 13. Panel de Configuración del Sistema
-
-El acceso pide la contraseña del administrador. Una vez autorizada, no se vuelve a pedir mientras la pestaña del navegador siga abierta.
-
-> La contraseña se valida en el navegador: protege contra cambios accidentales, pero no es seguridad real frente a usuarios con conocimientos técnicos.
-
-Incluye recargos, horas extras, horario nocturno, conceptos de nómina y códigos de exportación.
-
-| Concepto | % por defecto |
-|---|---:|
-| Recargo nocturno | 35 |
-| Recargo festivo diurno | 90 |
-| Recargo festivo nocturno | 125 |
-| Extra diurna | 25 |
-| Extra nocturna | 75 |
-| Extra festiva diurna | 115 |
-| Extra festiva nocturna | 165 |
-
-La configuración se guarda en el navegador (`localStorage`).
-
----
-
-## 14. Vista de Resultados
-
-### 14.1 Modos
-
-- **Resultado individual** (📊 en el empleado): muestra solo ese empleado. El botón **Ver resultados de todos** cambia al resultado general.
-- **Resultado general** (botón **Ver Resultados**): todos los empleados.
-- **← Atrás** vuelve a la programación sin perder datos.
-
-### 14.2 Pestañas
-
-1. **Resultados Semanales:** detalle por día, horas que I/V suman al tope y horas justificadas para la deuda.
-2. **Resumen Total del Período:** incluye horas reconocidas por incapacidad y por vacaciones.
-3. **Liquidación de Pago.**
-
----
-
-## 15. Liquidación de Pago
-
-```text
-Valor hora ordinaria = salario mensual / 220
-```
-
-| Tipo | Cálculo |
-|---|---|
-| Recargo | valor hora × (porcentaje / 100) |
-| Hora extra | valor hora × (1 + porcentaje / 100) |
-
----
-
-## 16. Exportación a Excel
-
-Exporta exactamente lo que se ve en resultados: todos los empleados o, en resultado individual, solo ese empleado.
-
-| Hoja | Contenido |
-|---|---|
-| Informe Horas Extras | Una fila por día trabajado o con concepto, con códigos de exportación para nómina. En días de incapacidad o vacaciones, la columna Horas Trabajadas muestra las horas reconocidas (7,33) solo si ese día sumó al tope (semana con turnos, no domingo ni festivo); es informativo y no entra en los totales |
-| Novedades de Nómina | Fechas de incapacidad, vacaciones, permisos y demás conceptos, con su efecto en el tope |
-| Liquidación de Pago | Valores por concepto y total por empleado |
-| Resumen Total Horas | Totales del período, incluidas horas reconocidas por I/V |
-| Semana N | Detalle diario, tipo de día (hábil/domingo/festivo) y si el día está dentro del período |
-| Resumen de Turnos | Conteo de turnos por tipo y semana |
-
-Las horas se exportan como números con 2 decimales y los encabezados con formato.  
-En web usa descarga del navegador; en Electron, el diálogo de guardado.
-
----
-
-## 17. Buenas Prácticas Operativas
-
-1. Configure turnos y alimentación antes de programar.
-2. Pre-guarde cada empleado al terminar su programación.
-3. Registre incapacidades, vacaciones y permisos con su concepto, no como turno trabajado.
-4. Revise domingos y festivos antes de liquidar.
-5. Exporte y archive el Excel al cerrar el cálculo.
-
----
-
-## 18. Solución de Problemas
-
-### No abre el manual
-- Verifique `archivos/instructivo.js`.
-
-### No exporta Excel
-- Verifique la conexión a internet (la librería de Excel se carga desde CDN).
-- En web: habilite descargas del navegador.
-
-### No aparece un turno en el selector
-- Verifique que esté activo y no haya sido eliminado.
-
-### Los cambios no se reflejan
-- Recargue con **Ctrl + F5**.
-
-### Perdí la programación al recargar
-- Si fue pre-guardada, use **Continuar programación** en la pantalla inicial.
-- La programación se guarda por navegador y equipo: otro navegador no la ve.
-
----
-
-## 19. Glosario Rápido
-
-| Término | Definición |
-|---|---|
-| Acumulado semanal | Horas trabajadas + I/V reconocidas − ausencias, usado para extras |
-| Horas reconocidas | Horas de I/V que suman al tope |
-| Horas deuda | Horas faltantes para completar el tope semanal |
-| Turno dinámico | Turno configurable por administrador |
-| Turno manual | Turno definido por hora inicio/fin en un día específico |
-| Extra | Hora trabajada después de alcanzar el tope semanal |
-
----
-
-## 20. Control de Cambios del Manual
-
-| Versión | Fecha | Cambio |
-|---|---|---|
-| 2.1 | Jul-2026 | Manual anterior |
-| 3.0 | Jul-2026 | Revisión alineada a la lógica del sistema |
-| 4.1 | Nov-2026 | Nuevo diseño de la pantalla inicial y de la programación, ventana para crear/editar turnos, colores base de turnos, horas reconocidas de I/V en el Informe |
-| 4.0 | Nov-2026 | I/V suman al tope (7,33 h; no domingo/festivo; requiere turno real), clasificación cronológica, selector de tarjetas, colores fijos, contraseña, pre-guardado persistente, resultados individuales, eliminación de turnos y empleados, Excel auditado |
-
----
-
-*Sistema de Control de Turnos v5.0 — © 2026 Alejostone — Todos los derechos reservados.*
+*Control de Turnos v5.0 · © 2026 Alejostone · Para detalles técnicos consulte el Manual del desarrollador.*

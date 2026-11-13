@@ -46,6 +46,7 @@ class SistemaTurnosMejorado {
       this.inicializarEventos();
       this.configurarFechasActuales();
       this.popularFormularioDeConfiguracion();
+      this._actualizarPasos("seccion-configuracion");
     }
 
     // Base de datos de festivos en Colombia (formato YYYY-MM-DD)
@@ -628,7 +629,7 @@ class SistemaTurnosMejorado {
         N: { id: 't_noche', nombre: "Noche", codigo: "N", inicio: "19:00", fin: "07:00", color: c.N, descontarAlimentacion: true, activo: true, descripcion: "" },
         "24T": { id: 't_24', nombre: "24 Horas", codigo: "24T", inicio: "07:00", fin: "07:00", color: c["24T"], descontarAlimentacion: true, activo: true, descripcion: "" }
       };
-      config.versionTurnos = 2;
+      config.versionTurnos = 3;
     } else {
       // Garantizar propiedad descontarAlimentacion en configuraciones guardadas
       Object.values(config.turnosDinamicos).forEach(t => {
@@ -636,17 +637,14 @@ class SistemaTurnosMejorado {
           t.descontarAlimentacion = true;
         }
       });
-      // Migración: colores base (Día amarillo claro, Noche azul, 24 Horas violeta)
-      // solo si el turno conserva el color por defecto anterior
-      if (!config.versionTurnos || config.versionTurnos < 2) {
-        const anteriores = { D: "#fef3c7", N: "#dbeafe", "24T": "#e9d5ff" };
-        Object.entries(anteriores).forEach(([codigo, colorAnterior]) => {
+      // Migración (una sola vez): colores base solicitados para Día (amarillo claro),
+      // Noche (azul) y 24 Horas (violeta). Después el usuario puede cambiarlos.
+      if (!config.versionTurnos || config.versionTurnos < 3) {
+        Object.entries(SistemaTurnosMejorado.COLORES_TURNOS_BASE).forEach(([codigo, color]) => {
           const t = config.turnosDinamicos[codigo];
-          if (t && String(t.color || "").toLowerCase() === colorAnterior) {
-            t.color = SistemaTurnosMejorado.COLORES_TURNOS_BASE[codigo];
-          }
+          if (t) t.color = color;
         });
-        config.versionTurnos = 2;
+        config.versionTurnos = 3;
         huboLimpiezaInicial = true;
       }
     }
@@ -1914,9 +1912,9 @@ class SistemaTurnosMejorado {
     document.getElementById('btn-abrir-modal-empleado').addEventListener('click', () => {
         this.abrirModalEmpleado();
     });
-    document.getElementById('btn-cerrar-modal').addEventListener('click', () => {
-        document.getElementById('modal-agregar-empleado').style.display = 'none';
-    });
+    document.getElementById('btn-cerrar-modal').addEventListener('click', () => this.cerrarModalEmpleado());
+    const btnCancelarEmpleado = document.getElementById('btn-cancelar-modal-empleado');
+    if (btnCancelarEmpleado) btnCancelarEmpleado.addEventListener('click', () => this.cerrarModalEmpleado());
     document.getElementById('btn-confirmar-agregar-empleado').addEventListener('click', () => {
         this.agregarEmpleadoDesdeModal();
     });
@@ -1989,7 +1987,25 @@ class SistemaTurnosMejorado {
     document.getElementById("seccion-instructivo").style.display = "none";
 
     document.getElementById(seccionId).style.display = "block";
+    this._actualizarPasos(seccionId);
     window.scrollTo(0, 0);
+  }
+
+  /**
+   * Marca el paso actual (Configuración → Programación → Resultados).
+   */
+  _actualizarPasos(seccionId) {
+    const nav = document.getElementById("pasos-app");
+    if (!nav) return;
+    const pasos = Array.from(nav.querySelectorAll("li"));
+    const actual = pasos.findIndex((li) => li.dataset.seccion === seccionId);
+    nav.style.display = actual === -1 ? "none" : "";
+    pasos.forEach((li, i) => {
+      li.classList.toggle("activo", i === actual);
+      li.classList.toggle("completado", actual > -1 && i < actual);
+      if (i === actual) li.setAttribute("aria-current", "step");
+      else li.removeAttribute("aria-current");
+    });
   }
 
   /**
@@ -2453,10 +2469,41 @@ class SistemaTurnosMejorado {
     // Actualizar título del modal con progreso
     const tituloModal = document.querySelector('#modal-agregar-empleado .modal-header h2');
     const progreso = this.empleadosAgregados + 1;
-    tituloModal.textContent = `Agregar Empleado ${progreso} de ${this.numeroEmpleadosDefinido}`;
+    tituloModal.textContent = this.numeroEmpleadosDefinido > 1
+      ? `Agregar empleado (${progreso} de ${this.numeroEmpleadosDefinido})`
+      : "Agregar empleado";
 
     // Muestra el modal
     document.getElementById('modal-agregar-empleado').style.display = 'flex';
+    setTimeout(() => document.getElementById('modal-documento').focus(), 50);
+  }
+
+  /**
+   * Cierra el modal de empleado y lo deja listo para agregar (aunque se haya abierto para editar).
+   */
+  cerrarModalEmpleado() {
+    document.getElementById('modal-agregar-empleado').style.display = 'none';
+    this._restablecerModalEmpleado();
+  }
+
+  _restablecerModalEmpleado() {
+    const tituloModal = document.querySelector('#modal-agregar-empleado .modal-header h2');
+    const progreso = this.empleadosAgregados + 1;
+    tituloModal.textContent = this.numeroEmpleadosDefinido > 1
+      ? `Agregar empleado (${progreso} de ${this.numeroEmpleadosDefinido})`
+      : "Agregar empleado";
+    const doc = document.getElementById('modal-documento');
+    doc.readOnly = false;
+    ['modal-documento', 'modal-nombre', 'modal-salario', 'modal-fecha-inicio', 'modal-fecha-fin']
+      .forEach((id) => { document.getElementById(id).value = ''; });
+    this._mostrarErrorDocumento('');
+
+    // Quitar el listener de "editar" y volver a "agregar"
+    const btnConfirmar = document.getElementById('btn-confirmar-agregar-empleado');
+    const nuevo = btnConfirmar.cloneNode(true);
+    nuevo.textContent = 'Agregar empleado';
+    btnConfirmar.parentNode.replaceChild(nuevo, btnConfirmar);
+    nuevo.addEventListener('click', () => this.agregarEmpleadoDesdeModal());
   }
 
   agregarEmpleadoDesdeModal() {
@@ -2517,7 +2564,7 @@ class SistemaTurnosMejorado {
     if (!empleado) return;
 
     const tituloModal = document.querySelector('#modal-agregar-empleado .modal-header h2');
-    tituloModal.textContent = `Editar Empleado`;
+    tituloModal.textContent = "Editar empleado";
 
     document.getElementById('modal-documento').value = empleado.documento;
     document.getElementById('modal-documento').readOnly = true; // Prevent editing the document
@@ -2527,13 +2574,13 @@ class SistemaTurnosMejorado {
     document.getElementById('modal-fecha-fin').value = empleado.fechaFin;
 
     const btnConfirmar = document.getElementById('btn-confirmar-agregar-empleado');
-    btnConfirmar.textContent = 'Actualizar Empleado';
+    btnConfirmar.textContent = 'Guardar cambios';
 
     // Clone and replace the button to remove old event listeners
     const newBtnConfirmar = btnConfirmar.cloneNode(true);
     btnConfirmar.parentNode.replaceChild(newBtnConfirmar, btnConfirmar);
 
-    newBtnConfirmar.addEventListener('click', () => this.actualizarEmpleadoDesdeModal(documento), { once: true });
+    newBtnConfirmar.addEventListener('click', () => this.actualizarEmpleadoDesdeModal(documento));
 
 
     document.getElementById('modal-agregar-empleado').style.display = 'flex';
@@ -2594,21 +2641,7 @@ class SistemaTurnosMejorado {
     document.getElementById('modal-agregar-empleado').style.display = 'none';
 
     // Restore the modal to its original state for adding new employees
-    const tituloModal = document.querySelector('#modal-agregar-empleado .modal-header h2');
-    const progreso = this.empleadosAgregados + 1;
-    tituloModal.textContent = `Agregar Empleado ${progreso} de ${this.numeroEmpleadosDefinido}`;
-    document.getElementById('modal-documento').readOnly = false;
-    document.getElementById('modal-documento').value = '';
-    document.getElementById('modal-nombre').value = '';
-    document.getElementById('modal-salario').value = '';
-    document.getElementById('modal-fecha-inicio').value = '';
-    document.getElementById('modal-fecha-fin').value = '';
-    const btnConfirmar = document.getElementById('btn-confirmar-agregar-empleado');
-    btnConfirmar.textContent = 'Confirmar y Agregar';
-
-    const newBtnConfirmar = btnConfirmar.cloneNode(true);
-    btnConfirmar.parentNode.replaceChild(newBtnConfirmar, btnConfirmar);
-    newBtnConfirmar.addEventListener('click', () => this.agregarEmpleadoDesdeModal());
+    this._restablecerModalEmpleado();
 
     this.mostrarNotificacion(`Empleado ${empleado.nombre} actualizado exitosamente. Los turnos existentes se han preservado.`, "success");
   }

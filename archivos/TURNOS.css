@@ -5046,3 +5046,411 @@ body {
 #info-empleado .info-resultado-individual {
   background: transparent;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   v5.2 — Tema moderno: superficies suaves, pasos, modales compactos,
+          tabla de resultados sin desplazamiento lateral
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --tema-borde: #E6EBF2;
+  --tema-sombra: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --tema-sombra-hover: 0 6px 16px rgba(16, 24, 40, 0.08);
+  --tema-radio: 14px;
+}
+
+/* ─── Pasos ─────────────────────────────────────────────────────────── */
+.pasos-app {
+  background: #ffffff;
+  border-bottom: 1px solid var(--tema-borde);
+}
+.pasos-app ol {
+  list-style: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  max-width: 1280px;
+}
+.pasos-app li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #94A3B8;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.pasos-app li + li::before {
+  content: "";
+  width: 48px;
+  height: 2px;
+  border-radius: 2px;
+  background: #E2E8F0;
+  margin-right: 8px;
+}
+.paso-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.pasos-app li.activo {
+  color: var(--tema-navy);
+}
+.pasos-app li.activo .paso-num {
+  background: var(--tema-navy);
+  color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(31, 58, 95, 0.12);
+}
+.pasos-app li.completado {
+  color: #0F766E;
+}
+.pasos-app li.completado .paso-num {
+  background: #CCFBF1;
+  color: #0F766E;
+  font-size: 0;
+}
+.pasos-app li.completado .paso-num::after {
+  content: "✓";
+  font-size: 0.85rem;
+}
+.pasos-app li.completado + li::before,
+.pasos-app li.activo + li::before {
+  background: #E2E8F0;
+}
+.pasos-app li.completado + li.activo::before,
+.pasos-app li.completado + li.completado::before {
+  background: #99F6E4;
+}
+
+/* ─── Superficies ───────────────────────────────────────────────────── */
+.pc-panel,
+.tarjeta,
+.empleado-seccion {
+  border: 1px solid var(--tema-borde);
+  border-radius: var(--tema-radio);
+  box-shadow: var(--tema-sombra);
+}
+.pc-panel {
+  padding: 22px 24px;
+}
+.pc-panel-encabezado {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 18px;
+}
+.pc-panel-encabezado h3 {
+  font-size: 1.02rem;
+}
+.pc-grid {
+  gap: 22px;
+}
+.pc-titulo h2 {
+  font-size: 1.7rem;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Campos ────────────────────────────────────────────────────────── */
+.pc-input,
+#seccion-configuracion #salario-mensual.pc-input {
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+}
+.pc-input:hover {
+  border-color: #CBD5E1;
+}
+.pc-input:focus,
+#seccion-configuracion #salario-mensual.pc-input:focus {
+  background: #ffffff;
+  border-color: var(--color-primario);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+/* ─── Selector segmentado tipo "píldora" ────────────────────────────── */
+.pc-segmentado {
+  border: none;
+  border-radius: 12px;
+  background: #F1F5F9;
+  padding: 4px;
+  gap: 4px;
+  overflow: visible;
+}
+.pc-segmentado label {
+  border: none;
+  border-radius: 9px;
+  padding: 8px 16px;
+  color: #475569;
+}
+.pc-segmentado label:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+.pc-segmentado input:checked + label {
+  background: #ffffff;
+  color: var(--tema-navy);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+}
+
+/* ─── Botones ───────────────────────────────────────────────────────── */
+.pc-boton,
+.boton-principal,
+.boton-secundario,
+#btn-exportar {
+  border-radius: 10px;
+}
+.pc-boton-primario {
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
+}
+.pc-boton-primario:hover {
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+.pc-boton-texto {
+  border-radius: 8px;
+}
+.pc-acciones {
+  border-top: none;
+  padding-top: 4px;
+}
+.btn-accion {
+  border-radius: 8px;
+  border-color: #E2E8F0;
+}
+
+/* ─── Turnos como tarjetas suaves ───────────────────────────────────── */
+.turnos-lista {
+  gap: 8px;
+}
+.turnos-lista .turno-fila {
+  border: 1px solid #EEF2F6;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.turnos-lista .turno-fila:last-child {
+  border-bottom: 1px solid #EEF2F6;
+}
+.turnos-lista .turno-fila:hover {
+  border-color: #DCE3EC;
+  box-shadow: var(--tema-sombra-hover);
+}
+.turno-fila-codigo {
+  border-radius: 10px;
+  height: 36px;
+  min-width: 46px;
+}
+
+/* ─── Lista de empleados ────────────────────────────────────────────── */
+.emp-fila,
+.item-empleado.emp-fila {
+  border-radius: 10px;
+  border-bottom: none;
+  padding: 12px 10px;
+}
+.lista-empleados {
+  gap: 4px;
+}
+.empleado-header {
+  border-left: none;
+  border-radius: var(--tema-radio) var(--tema-radio) 0 0;
+}
+
+/* ─── Modales compactos ─────────────────────────────────────────────── */
+.modal-contenido.modal-compacto {
+  max-width: 520px;
+  padding: 20px 22px;
+  border-radius: 16px;
+}
+.modal-contenido.modal-turno {
+  max-width: 460px;
+}
+.modal-compacto .modal-header {
+  align-items: flex-start;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 14px;
+}
+.modal-compacto .modal-header h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+.modal-subtitulo {
+  margin: 2px 0 0;
+  font-size: 0.84rem;
+  color: var(--tema-texto-suave);
+}
+.modal-compacto .modal-cerrar {
+  font-size: 1.5rem;
+  line-height: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+.modal-compacto .modal-cerrar:hover {
+  background: #F1F5F9;
+}
+.modal-compacto .modal-body {
+  gap: 14px;
+}
+.modal-compacto .pc-campos {
+  gap: 12px 14px;
+}
+.modal-compacto .modal-footer {
+  margin-top: 18px;
+  padding-top: 0;
+  border-top: none;
+}
+.modal-compacto .mensaje-error-campo:empty {
+  min-height: 0;
+  margin: 0;
+}
+.modal-turno .turno-vista-previa {
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+.muestra-color {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+.color-personalizado {
+  height: 28px;
+  border-radius: 999px;
+}
+
+/* ─── Tabla de resultados compacta (sin desplazamiento lateral) ─────── */
+.tabla-turnos {
+  table-layout: fixed;
+}
+.tabla-turnos th {
+  padding: 8px 4px;
+  font-size: 0.74rem;
+  height: auto;
+}
+.tabla-turnos td {
+  padding: 6px 4px;
+  font-size: 0.84rem;
+}
+.tabla-turnos th:first-child,
+.tabla-turnos td:first-child {
+  width: 92px;
+}
+.tabla-turnos th:nth-child(2),
+.tabla-turnos td:nth-child(2) {
+  width: 150px;
+}
+.tabla-turnos td:first-child small {
+  font-size: 0.72rem;
+}
+.tabla-turnos .turno-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  white-space: normal;
+  line-height: 1.15;
+  padding: 4px 8px;
+  max-width: 100%;
+  font-size: 0.8rem;
+}
+.tabla-turnos .turno-badge small {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.9;
+}
+.tabla-liquidacion th:nth-child(2),
+.tabla-liquidacion td:nth-child(2) {
+  width: auto;
+}
+.resultado-semana {
+  padding: 16px;
+}
+#resultados-semanales .empleado-body {
+  padding: 14px;
+}
+.tabla-contenedor {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 640px) {
+  .pasos-app li + li::before {
+    width: 16px;
+  }
+  .paso-texto {
+    display: none;
+  }
+  .pasos-app li.activo .paso-texto {
+    display: inline;
+  }
+  .tabla-turnos {
+    table-layout: auto;
+  }
+}
+.tabla-turnos th.horas-turno,
+.tabla-turnos td.horas-turno {
+  width: 78px;
+}
+
+/* Manual de usuario */
+.contenido-markdown {
+  max-width: 920px;
+  margin: 0 auto;
+  line-height: 1.65;
+}
+.contenido-markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 14px 0 22px;
+  border: 1px solid var(--tema-borde);
+  border-radius: 12px;
+  box-shadow: var(--tema-sombra);
+}
+.contenido-markdown blockquote {
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: #F1F5F9;
+  border-left: 4px solid var(--tema-navy);
+  border-radius: 8px;
+}
+.contenido-markdown h1,
+.contenido-markdown h2,
+.contenido-markdown h3,
+.contenido-markdown h4 {
+  text-align: left;
+  color: var(--color-texto);
+  border-bottom: none;
+  letter-spacing: -0.01em;
+}
+.contenido-markdown h1 {
+  font-size: 1.9rem;
+  margin-bottom: 4px;
+}
+.contenido-markdown h2 {
+  font-size: 1.35rem;
+  margin-top: 28px;
+  padding-bottom: 0;
+}
+.contenido-markdown h1 + h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--tema-texto-suave);
+}
+.contenido-markdown h3 {
+  font-size: 1.1rem;
+  color: var(--tema-navy);
+}
+.contenido-markdown hr {
+  border: none;
+  border-top: 1px solid var(--tema-borde);
+  margin: 22px 0;
+}
