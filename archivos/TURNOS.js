@@ -46,6 +46,8 @@ class SistemaTurnosMejorado {
       this.inicializarEventos();
       this.configurarFechasActuales();
       this.popularFormularioDeConfiguracion();
+      this.inicializarSelectorPeriodo();
+      this.inicializarStepperEmpleados();
       this._actualizarPasos("seccion-configuracion");
     }
 
@@ -112,6 +114,9 @@ class SistemaTurnosMejorado {
       "2027-12-08", // Día de la Inmaculada Concepción
       "2027-12-25", // Navidad
     ]);
+
+    // El resumen del período cuenta festivos: se actualiza cuando ya existen
+    if (!this._options.skipUI) this._actualizarEtiquetaPeriodo();
   }
 
   /**
@@ -318,6 +323,365 @@ class SistemaTurnosMejorado {
         ? '0 0 0 3px rgba(220, 38, 38, 0.16)'
         : '0 4px 12px rgba(2,6,23,0.08)';
     }
+  }
+
+  // ─── Selector de período (calendario de rango) ─────────────────────────────
+
+  static get MESES() {
+    return ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  }
+
+  _parsearFechaKey(valor) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(valor || "")) return null;
+    const [a, m, d] = valor.split("-").map(Number);
+    return new Date(a, m - 1, d);
+  }
+
+  _fechaCorta(fecha) {
+    return `${fecha.getDate()} ${SistemaTurnosMejorado.MESES[fecha.getMonth()].slice(0, 3)} ${fecha.getFullYear()}`;
+  }
+
+  /**
+   * Resumen del período: días, semanas de cálculo (domingo a sábado) y festivos entre semana.
+   */
+  resumirPeriodo(inicio, fin) {
+    if (!inicio || !fin || fin < inicio) return null;
+    const dias = Math.round((fin - inicio) / 86400000) + 1;
+    const primerDomingo = new Date(inicio);
+    primerDomingo.setDate(inicio.getDate() - inicio.getDay());
+    const ultimoSabado = new Date(fin);
+    ultimoSabado.setDate(fin.getDate() + (6 - fin.getDay()));
+    const semanas = Math.round((ultimoSabado - primerDomingo) / 86400000 + 1) / 7;
+    let festivos = 0;
+    if (this.festivosColombia) {
+      for (let d = new Date(inicio); d <= fin; d.setDate(d.getDate() + 1)) {
+        if (d.getDay() !== 0 && this.esFestivo(d)) festivos++;
+      }
+    }
+    return { dias, semanas, festivos };
+  }
+
+  _actualizarEtiquetaPeriodo() {
+    if (typeof document === "undefined") return;
+    const inicio = this._parsearFechaKey(document.getElementById("fecha-inicio")?.value);
+    const fin = this._parsearFechaKey(document.getElementById("fecha-fin")?.value);
+    const diaSemana = (f) => (f ? this.diasSemana[f.getDay()] : "");
+    const poner = (id, texto) => { const el = document.getElementById(id); if (el) el.textContent = texto; };
+    poner("sp-desde", inicio ? this._fechaCorta(inicio) : "Elegir fecha");
+    poner("sp-hasta", fin ? this._fechaCorta(fin) : "Elegir fecha");
+    poner("sp-desde-dia", diaSemana(inicio));
+    poner("sp-hasta-dia", diaSemana(fin));
+
+    const resumenEl = document.getElementById("resumen-periodo");
+    if (!resumenEl) return;
+    const r = this.resumirPeriodo(inicio, fin);
+    if (!r) {
+      resumenEl.textContent = "Elija las fechas del período para empezar.";
+      return;
+    }
+    const partes = [
+      `${r.dias} días`,
+      `${r.semanas} ${r.semanas === 1 ? "semana" : "semanas"} de cálculo`,
+      r.festivos ? `${r.festivos} ${r.festivos === 1 ? "festivo" : "festivos"} entre semana` : "sin festivos entre semana",
+    ];
+    resumenEl.innerHTML = partes.map((p) => `<span>${p}</span>`).join("");
+  }
+
+  inicializarSelectorPeriodo() {
+    const boton = document.getElementById("campo-periodo");
+    if (!boton || boton.dataset.init === "1") return;
+    boton.dataset.init = "1";
+    boton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this._calendario) this._cerrarCalendarioPeriodo();
+      else this._abrirCalendarioPeriodo();
+    });
+    document.addEventListener("click", (e) => {
+      if (this._calendario && !e.target.closest(".calendario-periodo") && !e.target.closest("#campo-periodo")) {
+        this._cerrarCalendarioPeriodo();
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this._calendario) this._cerrarCalendarioPeriodo(true);
+    });
+    this._actualizarEtiquetaPeriodo();
+  }
+
+  _abrirCalendarioPeriodo() {
+    const inicio = this._parsearFechaKey(document.getElementById("fecha-inicio").value);
+    const fin = this._parsearFechaKey(document.getElementById("fecha-fin").value);
+    const base = inicio || new Date();
+    this._calendario = {
+      inicio,
+      fin,
+      hover: null,
+      mes: new Date(base.getFullYear(), base.getMonth(), 1),
+      panel: document.createElement("div"),
+    };
+    const panel = this._calendario.panel;
+    panel.className = "calendario-periodo";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Elegir período");
+    document.body.appendChild(panel);
+    document.getElementById("campo-periodo").setAttribute("aria-expanded", "true");
+
+    panel.addEventListener("click", (e) => this._clicCalendario(e));
+    panel.addEventListener("mouseover", (e) => {
+      const dia = e.target.closest(".cal-dia");
+      if (!dia || !this._calendario.inicio || this._calendario.fin) return;
+      this._calendario.hover = this._parsearFechaKey(dia.dataset.fecha);
+      this._pintarRangoCalendario();
+    });
+
+    this._renderCalendarioPeriodo();
+    this._posicionarCalendario();
+    const foco = panel.querySelector(".cal-dia.inicio") || panel.querySelector(".cal-dia.hoy") || panel.querySelector(".cal-dia");
+    if (foco) foco.focus({ preventScroll: true });
+  }
+
+  _posicionarCalendario() {
+    const cal = this._calendario;
+    if (!cal) return;
+    const boton = document.getElementById("campo-periodo");
+    const r = boton.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const ancho = Math.min(cal.panel.offsetWidth || 640, vw - 24);
+    let left = r.left + window.scrollX;
+    if (left + ancho > window.scrollX + vw - 12) left = window.scrollX + vw - ancho - 12;
+    cal.panel.style.left = `${Math.max(window.scrollX + 12, left)}px`;
+    cal.panel.style.top = `${r.bottom + window.scrollY + 10}px`;
+  }
+
+  _cerrarCalendarioPeriodo(devolverFoco = false) {
+    if (!this._calendario) return;
+    this._calendario.panel.remove();
+    this._calendario = null;
+    const boton = document.getElementById("campo-periodo");
+    if (boton) {
+      boton.setAttribute("aria-expanded", "false");
+      if (devolverFoco) boton.focus();
+    }
+  }
+
+  _renderCalendarioPeriodo() {
+    const cal = this._calendario;
+    const dosMeses = document.documentElement.clientWidth > 700;
+    const meses = dosMeses ? [cal.mes, new Date(cal.mes.getFullYear(), cal.mes.getMonth() + 1, 1)] : [cal.mes];
+    const hoyKey = this._fechaKey(new Date());
+    const nombreMes = (m) => `${SistemaTurnosMejorado.MESES[m.getMonth()]} ${m.getFullYear()}`;
+    const cabecera = ["D", "L", "M", "M", "J", "V", "S"].map((d, i) => `<span class="${i === 0 ? "cal-cab-domingo" : ""}">${d}</span>`).join("");
+
+    const htmlMes = (m) => {
+      const primero = new Date(m.getFullYear(), m.getMonth(), 1);
+      const diasMes = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+      let celdas = "";
+      for (let i = 0; i < primero.getDay(); i++) celdas += `<span class="cal-vacio"></span>`;
+      for (let d = 1; d <= diasMes; d++) {
+        const fecha = new Date(m.getFullYear(), m.getMonth(), d);
+        const key = this._fechaKey(fecha);
+        const festivo = this.festivosColombia && fecha.getDay() !== 0 && this.esFestivo(fecha);
+        const clases = ["cal-dia"];
+        if (fecha.getDay() === 0) clases.push("domingo");
+        if (festivo) clases.push("festivo");
+        if (key === hoyKey) clases.push("hoy");
+        celdas += `<button type="button" class="${clases.join(" ")}" data-fecha="${key}" aria-label="${d} de ${SistemaTurnosMejorado.MESES[m.getMonth()]}${festivo ? ", festivo" : ""}">${d}</button>`;
+      }
+      return `
+        <div class="cal-mes">
+          <div class="cal-mes-titulo">${nombreMes(m)}</div>
+          <div class="cal-cabecera">${cabecera}</div>
+          <div class="cal-grilla">${celdas}</div>
+        </div>`;
+    };
+
+    cal.panel.innerHTML = `
+      <div class="cal-navegacion">
+        <button type="button" class="cal-nav" data-accion="anterior" aria-label="Mes anterior">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <div class="cal-atajos">
+          <button type="button" class="cal-atajo" data-accion="mes">Mes completo</button>
+          <button type="button" class="cal-atajo" data-accion="q1">1 al 15</button>
+          <button type="button" class="cal-atajo" data-accion="q2">16 a fin de mes</button>
+        </div>
+        <button type="button" class="cal-nav" data-accion="siguiente" aria-label="Mes siguiente">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="cal-meses">${meses.map(htmlMes).join("")}</div>
+      <div class="cal-pie">
+        <div class="cal-seleccion" aria-live="polite"></div>
+        <div class="cal-pie-acciones">
+          <button type="button" class="pc-boton pc-boton-secundario pc-boton-sm" data-accion="cancelar">Cancelar</button>
+          <button type="button" class="pc-boton pc-boton-primario pc-boton-sm" data-accion="aplicar">Aplicar</button>
+        </div>
+      </div>`;
+    this._pintarRangoCalendario();
+  }
+
+  _pintarRangoCalendario() {
+    const cal = this._calendario;
+    if (!cal) return;
+    const ini = cal.inicio;
+    const fin = cal.fin || (ini && cal.hover && cal.hover >= ini ? cal.hover : null);
+    cal.panel.querySelectorAll(".cal-dia").forEach((btn) => {
+      const f = this._parsearFechaKey(btn.dataset.fecha);
+      const esIni = ini && f.getTime() === ini.getTime();
+      const esFin = fin && f.getTime() === fin.getTime();
+      btn.classList.toggle("inicio", Boolean(esIni));
+      btn.classList.toggle("fin", Boolean(esFin));
+      btn.classList.toggle("en-rango", Boolean(ini && fin && f > ini && f < fin));
+      btn.classList.toggle("previa", Boolean(!cal.fin && esFin));
+      btn.setAttribute("aria-pressed", String(Boolean(esIni || esFin)));
+    });
+    const sel = cal.panel.querySelector(".cal-seleccion");
+    const aplicar = cal.panel.querySelector('[data-accion="aplicar"]');
+    if (!ini) {
+      sel.innerHTML = `<span class="cal-ayuda">Elija el primer día del período.</span>`;
+    } else if (!cal.fin) {
+      sel.innerHTML = `<strong>${this._fechaCorta(ini)}</strong><span class="cal-ayuda">Ahora elija el último día.</span>`;
+    } else {
+      const r = this.resumirPeriodo(ini, cal.fin);
+      sel.innerHTML = `<strong>${this._fechaCorta(ini)} – ${this._fechaCorta(cal.fin)}</strong><span class="cal-ayuda">${r.dias} días · ${r.semanas} ${r.semanas === 1 ? "semana" : "semanas"} de cálculo${r.festivos ? ` · ${r.festivos} ${r.festivos === 1 ? "festivo" : "festivos"}` : ""}</span>`;
+    }
+    if (aplicar) aplicar.disabled = !(ini && cal.fin);
+  }
+
+  _clicCalendario(e) {
+    const cal = this._calendario;
+    const objetivo = e.target.closest("button");
+    if (!objetivo) return;
+    e.stopPropagation();
+    const accion = objetivo.dataset.accion;
+    const a = cal.mes.getFullYear();
+    const m = cal.mes.getMonth();
+
+    if (objetivo.classList.contains("cal-dia")) {
+      const f = this._parsearFechaKey(objetivo.dataset.fecha);
+      if (!cal.inicio || cal.fin || f < cal.inicio) {
+        cal.inicio = f;
+        cal.fin = null;
+      } else {
+        cal.fin = f;
+      }
+      cal.hover = null;
+      this._pintarRangoCalendario();
+      return;
+    }
+    if (accion === "anterior" || accion === "siguiente") {
+      cal.mes = new Date(a, m + (accion === "anterior" ? -1 : 1), 1);
+      this._renderCalendarioPeriodo();
+      return;
+    }
+    if (accion === "mes" || accion === "q1" || accion === "q2") {
+      const ultimo = new Date(a, m + 1, 0).getDate();
+      cal.inicio = new Date(a, m, accion === "q2" ? 16 : 1);
+      cal.fin = new Date(a, m, accion === "q1" ? 15 : ultimo);
+      this._pintarRangoCalendario();
+      return;
+    }
+    if (accion === "cancelar") {
+      this._cerrarCalendarioPeriodo(true);
+      return;
+    }
+    if (accion === "aplicar" && cal.inicio && cal.fin) {
+      this.aplicarPeriodo(this._fechaKey(cal.inicio), this._fechaKey(cal.fin));
+      this._cerrarCalendarioPeriodo(true);
+    }
+  }
+
+  /**
+   * Fija el período en el formulario (fuente de verdad: #fecha-inicio y #fecha-fin).
+   */
+  aplicarPeriodo(inicioKey, finKey) {
+    const ini = document.getElementById("fecha-inicio");
+    const fin = document.getElementById("fecha-fin");
+    ini.value = inicioKey;
+    fin.value = finKey;
+    ini.dispatchEvent(new Event("change", { bubbles: true }));
+    fin.dispatchEvent(new Event("change", { bubbles: true }));
+    this._actualizarEtiquetaPeriodo();
+  }
+
+  // ─── Número de empleados ───────────────────────────────────────────────────
+
+  inicializarStepperEmpleados() {
+    const input = document.getElementById("numero-empleados");
+    if (!input) return;
+    const fijar = (valor) => {
+      const min = Number(input.min) || 1;
+      const max = Number(input.max) || 50;
+      input.value = Math.min(max, Math.max(min, Math.round(Number(valor) || min)));
+    };
+    document.querySelectorAll(".stepper-btn").forEach((btn) => {
+      btn.addEventListener("click", () => fijar(Number(input.value) + Number(btn.dataset.paso)));
+    });
+    input.addEventListener("change", () => fijar(input.value));
+  }
+
+  // ─── Regla de 24 horas ─────────────────────────────────────────────────────
+
+  /**
+   * Regla de 0 a 24 h con el horario del turno, el horario nocturno y la pausa de alimentación.
+   */
+  _htmlReglaTurno(turno, confAlm, { conMarcas = true } = {}) {
+    if (!turno.inicio || !turno.fin) return "";
+    const pct = (min) => `${((min / 1440) * 100).toFixed(3)}%`;
+    const tramo = (desde, hasta, clase, estilo = "") =>
+      `<span class="${clase}" style="left:${pct(desde)};width:${pct(hasta - desde)};${estilo}"></span>`;
+    const partir = (desde, hasta) => {
+      // Devuelve tramos dentro de [0, 1440], partiendo los que pasan la medianoche
+      const d = ((desde % 1440) + 1440) % 1440;
+      const largo = hasta - desde;
+      if (largo >= 1440) return [[0, 1440]];
+      return d + largo <= 1440 ? [[d, d + largo]] : [[d, 1440], [0, d + largo - 1440]];
+    };
+
+    const ini = this._toMinutes(turno.inicio);
+    let fin = this._toMinutes(turno.fin);
+    if (fin <= ini) fin += 1440;
+
+    const nocturno = this.configuracion?.recargoNocturno || { inicio: "19:00", fin: "06:00" };
+    const ni = this._toMinutes(nocturno.inicio);
+    let nf = this._toMinutes(nocturno.fin);
+    if (nf <= ni) nf += 1440;
+
+    let html = partir(ni, nf).map(([d, h]) => tramo(d, h, "regla-noche")).join("");
+    html += partir(ini, fin).map(([d, h]) => tramo(d, h, "regla-turno", `background:${turno.color};`)).join("");
+
+    if (turno.descontarAlimentacion !== false) {
+      const ctx = this._obtenerContextoAlimentacionTurno(turno.inicio, turno.fin, confAlm, turno.inicio === turno.fin);
+      const pausas = [[ctx.inicioProgramado, ctx.inicioEfectivo], ...ctx.ventanasNoLaboradas.map((w) => [w.start, w.end])];
+      pausas.filter(([d, h]) => h > d).forEach(([d, h]) => {
+        html += partir(d, h).map(([a, b]) => tramo(a, b, "regla-pausa")).join("");
+      });
+    }
+
+    const marcas = conMarcas
+      ? `<div class="regla-marcas">${[0, 6, 12, 18, 24].map((h) => `<span style="left:${(h / 24) * 100}%">${String(h).padStart(2, "0")}</span>`).join("")}</div>`
+      : "";
+    return `<div class="regla" role="img" aria-label="Turno de ${this.formatearHoraAMPM(turno.inicio)} a ${this.formatearHoraAMPM(turno.fin)}"><div class="regla-pista">${html}</div>${marcas}</div>`;
+  }
+
+  /**
+   * Ejemplo vivo de la alimentación aplicada al turno Día (o al primer turno activo).
+   */
+  _actualizarEjemploAlimentacion() {
+    const cont = typeof document !== "undefined" ? document.getElementById("alimentacion-ejemplo") : null;
+    if (!cont) return;
+    const turnos = this.configuracion.turnosDinamicos || {};
+    const turno = (turnos.D && turnos.D.activo !== false) ? turnos.D : Object.values(turnos).find((t) => t.activo);
+    if (!turno) { cont.innerHTML = ""; return; }
+    const conf = this._leerAlmuerzoFormulario();
+    const ejemplo = { ...turno, descontarAlimentacion: true };
+    const horas = this._horasEfectivasTurno(ejemplo, conf);
+    const total = this._duracionRangoMinutos(turno.inicio, turno.fin) / 60 || 24;
+    cont.innerHTML = `
+      <div class="alim-ejemplo-texto">
+        <span>Así queda el turno <strong>${this._escaparHTML(turno.nombre)}</strong></span>
+        <span class="alim-ejemplo-cifra">${this._formatearHoras(horas)} h <small>de ${this._formatearHoras(total)} h</small></span>
+      </div>
+      ${this._htmlReglaTurno(ejemplo, conf)}`;
   }
 
   formatearHoraAMPM(timeStr) {
@@ -943,6 +1307,7 @@ class SistemaTurnosMejorado {
           <span class="turno-fila-nombre">${this._escaparHTML(turno.nombre)}${protegido ? ' <span class="turno-fila-etiqueta">Base</span>' : ""}${turno.activo ? "" : ' <span class="turno-fila-etiqueta etiqueta-inactivo">Inactivo</span>'}</span>
           <span class="turno-fila-detalle">${this.formatearHoraAMPM(turno.inicio)} – ${this.formatearHoraAMPM(turno.fin)} · ${this._formatearHoras(horas)} h efectivas${turno.descontarAlimentacion !== false ? "" : " · sin descuento de alimentación"}</span>
         </div>
+        <div class="turno-fila-regla">${this._htmlReglaTurno(turno, confAlm, { conMarcas: false })}</div>
         <div class="turno-fila-acciones">
           <button type="button" class="btn-accion btn-editar-turno" data-codigo="${this._escaparHTML(turno.codigo)}">Editar</button>
           ${protegido ? "" : `
@@ -962,6 +1327,7 @@ class SistemaTurnosMejorado {
     container.querySelectorAll(".delete-shift-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => this.eliminarTurnoDinamico(e.currentTarget.dataset.codigo));
     });
+    this._actualizarEjemploAlimentacion();
   }
 
   _horasEfectivasTurno(turno, confAlm) {
@@ -1108,7 +1474,8 @@ class SistemaTurnosMejorado {
         <span class="turno-fila-detalle">${turno.inicio && turno.fin
           ? `${this.formatearHoraAMPM(turno.inicio)} – ${this.formatearHoraAMPM(turno.fin)} · ${this._formatearHoras(horas)} h efectivas`
           : "Defina inicio y fin"}</span>
-      </div>`;
+      </div>
+      ${turno.inicio && turno.fin ? `<div class="turno-vista-regla">${this._htmlReglaTurno({ ...turno, color }, this._leerAlmuerzoFormulario())}</div>` : ""}`;
     document.querySelectorAll("#modal-turno .muestra-color").forEach((btn) => {
       btn.classList.toggle("activa", btn.dataset.color.toLowerCase() === color.toLowerCase());
     });
@@ -2230,6 +2597,7 @@ class SistemaTurnosMejorado {
       year: "numeric",
     }; // Formato de fecha deseado.
     elemento.textContent = fecha.toLocaleDateString("es-CO", opciones);
+    this._actualizarEtiquetaPeriodo();
   }
 
   /**

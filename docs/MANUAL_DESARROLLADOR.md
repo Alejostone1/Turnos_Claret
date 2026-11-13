@@ -14,7 +14,7 @@ Aplicación **100 % frontend**, sin servidor ni base de datos:
 | `INICIO_TURNOS.html` | Vista única con las secciones: configuración, programación, resultados, configuración del sistema y manual. Incluye los modales (empleado, turno, contraseña). |
 | `index.html` | Redirige a `INICIO_TURNOS.html` (entrada de Vercel). |
 | `archivos/TURNOS.js` | Clase `SistemaTurnosMejorado`: interfaz, motor de cálculo, persistencia y exportación. |
-| `archivos/TURNOS.css` | Estilos. Los bloques `v5`, `v5.1` y `v5.2` al final definen el tema actual y sobrescriben estilos anteriores. |
+| `archivos/TURNOS.css` | Estilos. El bloque `v6 — Tema táctil` al final define el tema actual (tokens `--t-*`, superficies elevadas, controles hundidos, botones tipo tecla) y sobrescribe estilos anteriores. |
 | `archivos/instructivo.md` | Manual de usuario (Markdown). |
 | `archivos/instructivo.js` | El mismo manual en Base64 (`window.INSTRUCTIVO_B64`) para abrirlo desde `file://` sin bloqueos de CORS. |
 | `archivos/manual/*.png` | Capturas usadas por el manual de usuario. |
@@ -27,6 +27,7 @@ Librerías externas por CDN, con versión fija:
 |---|---|
 | `xlsx-js-style@1.2.0` | Generación del Excel con estilos (compatible con SheetJS 0.18.5; expone `XLSX`). |
 | `marked@12.0.2` | Renderiza el manual en Markdown. |
+| Google Fonts | Bricolage Grotesque (títulos), IBM Plex Sans (texto), IBM Plex Mono (horas, fechas y cifras). Sin internet se usan fuentes del sistema. |
 
 La instancia queda disponible como `window.sistemaTurnos` para soporte y pruebas.
 
@@ -187,6 +188,10 @@ Pantalla y Excel usan **estas mismas funciones**.
 | `continuarProgramacionGuardada()` | Recupera desde `localStorage`. |
 | `verResultadosEmpleado(doc)` | Resultado individual. |
 | `solicitarContraseñaParaConfig()` | Modal de contraseña. |
+| `inicializarSelectorPeriodo()` / `aplicarPeriodo(ini, fin)` | Calendario de rango propio. Escribe en `#fecha-inicio` y `#fecha-fin` (ocultos), que siguen siendo la fuente de verdad. |
+| `resumirPeriodo(inicio, fin)` | Días, semanas de cálculo (domingo a sábado) y festivos entre semana. |
+| `_htmlReglaTurno(turno, confAlm)` | Regla de 24 h: horario del turno, horario nocturno (`recargoNocturno`) y pausas de alimentación (las mismas ventanas que usa el motor). |
+| `_actualizarEjemploAlimentacion()` | Ejemplo vivo de horas efectivas del turno Día con la alimentación elegida. |
 
 Constantes estáticas (al final de `TURNOS.js`):
 

@@ -34,11 +34,22 @@ El trabajo se hace en tres pasos, que siempre verá en la parte superior de la p
 
 ### 3.1 Datos del período
 
-| Campo | Qué escribir |
+| Campo | Qué hacer |
 |---|---|
-| Número de empleados | Cuántos empleados va a agregar ahora. Después puede agregar más. |
+| Fechas a liquidar | Pulse el recuadro **Desde – Hasta** para abrir el calendario. |
+| Empleados | Use **−** y **+** (o escriba el número). Después puede agregar más. |
 | Salario mensual base | El salario que aparecerá por defecto al agregar cada empleado. |
-| Fecha de inicio y fin | El período que va a liquidar. Debajo de cada fecha verá qué día de la semana es. |
+
+Debajo del título verá un resumen del período: cuántos días tiene, cuántas semanas se calculan y cuántos festivos caen entre semana.
+
+#### Elegir las fechas en el calendario
+
+![Calendario para elegir el período](archivos/manual/10-calendario.png)
+
+1. Pulse el **primer día** del período y luego el **último**.
+2. O use un atajo: **Mes completo**, **1 al 15** o **16 a fin de mes** (del mes que está viendo).
+3. Las flechas cambian de mes. Los domingos están en rojo y los festivos tienen un punto rojo.
+4. Abajo verá el resumen de lo elegido. Pulse **Aplicar**.
 
 > El sistema siempre trabaja con **semanas de domingo a sábado**. Si el período empieza un miércoles, igual verá esa semana completa, porque los días anteriores cuentan para saber cuándo empiezan las extras.
 
@@ -52,7 +63,13 @@ Aquí están los turnos que podrá asignar. Vienen tres turnos base:
 | **N** · Noche | Azul |
 | **24T** · 24 Horas | Violeta |
 
-Cada turno muestra su horario y cuántas **horas efectivas** tiene (ya descontada la alimentación).
+Cada turno muestra su horario, cuántas **horas efectivas** tiene (ya descontada la alimentación) y una **regla de 24 horas**:
+
+- La barra de color es el horario del turno.
+- La franja gris azulada es el horario nocturno (por defecto de 7:00 p. m. a 6:00 a. m.).
+- La marca oscura es la pausa de alimentación.
+
+Así puede ver de un vistazo cuántas horas de cada turno son nocturnas.
 
 #### Crear un turno nuevo
 
@@ -88,7 +105,7 @@ Elija cómo se descuenta el tiempo de comida:
 | Tiempo fijo | Se descuentan **30 minutos** o **1 hora**. |
 | Horario | Usted indica el rango (por ejemplo, de 12:00 a 1:00). |
 
-La alimentación se descuenta **al inicio del turno**. Ejemplo: un turno de 7:00 a. m. a 7:00 p. m. con 30 minutos de alimentación da **11,5 horas** efectivas.
+La alimentación se descuenta **al inicio del turno**. Debajo de las opciones verá **cómo queda el turno Día** con la alimentación elegida, por ejemplo **11,5 h de 12 h**, y la lista de turnos se actualiza al momento.
 
 En turnos de **24 horas** se descuentan **dos** pausas.
 

@@ -310,4 +310,19 @@ seccion("Documento, contraseña y colores fijos");
   assert("Migración: se restaura el color fijo", migrada.tiposTurnoEspeciales.I.color, "#1E88E5");
 }
 
+seccion("Período y regla de 24 horas");
+{
+  const app = crearApp();
+  const r = app.resumirPeriodo(new Date(2026, 10, 1), new Date(2026, 10, 30));
+  assert("Noviembre 2026: 30 días, 5 semanas, 2 festivos entre semana", r, { dias: 30, semanas: 5, festivos: 2 });
+  const q = app.resumirPeriodo(new Date(2026, 10, 3), new Date(2026, 10, 21));
+  assert("3 al 21 nov: 19 días, 3 semanas, 1 festivo", q, { dias: 19, semanas: 3, festivos: 1 });
+  assert("Fin antes del inicio: sin resumen", app.resumirPeriodo(new Date(2026, 10, 5), new Date(2026, 10, 1)), null);
+  const regla = app._htmlReglaTurno({ inicio: "19:00", fin: "07:00", color: "#3B82F6", descontarAlimentacion: true }, { tipo: "predefinido", tiempoEnHoras: 0.5 });
+  assert("Regla de turno nocturno: se parte en la medianoche (2 tramos)", (regla.match(/class=\"regla-turno\"/g) || []).length, 2);
+  assert("Regla: muestra la pausa de alimentación", regla.includes("regla-pausa"), true);
+  const r24 = app._htmlReglaTurno({ inicio: "07:00", fin: "07:00", color: "#8B5CF6", descontarAlimentacion: true }, { tipo: "predefinido", tiempoEnHoras: 0.5 });
+  assert("Regla de 24 h: dos pausas", (r24.match(/regla-pausa/g) || []).length, 2);
+}
+
 terminar();
