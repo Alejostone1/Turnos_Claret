@@ -45,7 +45,7 @@ El sistema permite programar turnos por empleado y calcular automáticamente rec
 - Turno manual por día específico.
 - Configuración de alimentación (sin, predefinida, personalizada).
 - Motor de cálculo minuto a minuto con clasificación **cronológica** al cruzar el tope.
-- Tope semanal de 42 h; incapacidad y vacaciones suman 7,33 h según reglas (ver 10.2).
+- Tope semanal de 42 h; incapacidad y vacaciones cuentan 7,33 h para la jornada pero no generan extras (ver 10.2).
 - Colores fijos para Incapacidad, Sin contrato, Permiso, Ausencia y Vacaciones.
 - Pre-guardado persistente: la programación se recupera al recargar la página.
 - Resultados **individuales** por empleado y resultados generales.
@@ -227,7 +227,7 @@ Valor hora ordinaria = salario mensual / 220
 ### 10.1 Tope semanal y horas extras
 
 - El tope base es **42 horas por semana** (domingo a sábado). El acumulado se reinicia cada domingo.
-- Los días se recorren en orden llevando un **acumulado semanal**. Suman: horas realmente trabajadas (turnos dinámicos y manual) y las horas reconocidas de incapacidad/vacaciones (10.2).
+- Los días se recorren en orden llevando un **acumulado semanal**. Para las extras solo suman las horas realmente trabajadas (turnos dinámicos y manual). Incapacidad y vacaciones cuentan para la jornada, no para extras (10.2).
 - Cada minuto trabajado se clasifica **cronológicamente**: lo anterior al instante en que se alcanza el tope es ordinario; lo posterior es extra, con la naturaleza (diurna/nocturna, hábil/festiva) del momento en que ocurre.
 - Los festivos no trabajados **no reducen** el tope.
 - Domingo trabajado sin ningún día libre (`C`) en la semana: sus horas se liquidan como extras.
@@ -238,7 +238,7 @@ Los conceptos especiales **no son horas trabajadas**: nunca generan horas ordina
 
 | Concepto | Código | Horas por defecto | Efecto en el tope de 42 h |
 |---|---|---:|---|
-| Incapacidad | `I` | 7,33 | **Suma** al acumulado, excepto domingo y festivo, y solo si la semana tiene al menos un turno trabajado |
+| Incapacidad | `I` | 7,33 | Cuenta para la **jornada** (cubre horas faltantes y se informa), excepto domingo y festivo, y solo si la semana tiene turnos. **No** suma para extras |
 | Vacaciones | `V` | 7,33 | Igual que incapacidad |
 | Permiso remunerado | `PR` | 7 | No suma; solo cubre la deuda semanal |
 | Ausencia | `A` | 7 | Resta sus horas del acumulado |
@@ -247,10 +247,11 @@ Los conceptos especiales **no son horas trabajadas**: nunca generan horas ordina
 
 **Ejemplos** (tope 42 h):
 
-| Semana | Trabajadas | I/V que suman | Extras |
+| Semana | Trabajadas | I/V para la jornada | Extras |
 |---|---:|---:|---:|
-| Dom `I`, Lun `I`, Mar–Jue turnos de 11 h | 33 h | 7,33 h (el domingo no suma) | 0 h (40,33 < 42) |
-| Dom `V`, Lun–Mié `V`, Jue–Sáb turnos de 11 h | 33 h | 21,99 h | 12,99 h (desde el viernes) |
+| Dom `I`, Lun `I`, Mar–Jue turnos de 11 h | 33 h | 7,33 h (el domingo no cuenta) | 0 h (33 < 42) |
+| Dom `V`, Lun–Mié `V`, Jue–Sáb turnos de 11 h | 33 h | 21,99 h | 0 h (33 < 42) |
+| Dom–Mar `I`, Mié–Sáb turnos de 11 h | 44 h | 14,66 h | 2 h (44 − 42, el sábado) |
 | Lun–Sáb `I`, sin turnos | 0 h | 0 h (sin turno trabajado) | 0 h |
 | Lun `PR`, Mar–Vie turnos de 11 h | 44 h | 0 h | 2 h |
 
@@ -266,7 +267,7 @@ Las horas de I/PR/V cubren la deuda excepto en domingo y festivo. Un concepto pe
 
 | Hoja | Contenido |
 |---|---|
-| Informe Horas Extras | Formato de importación a nómina (códigos 045, 046, 011, …). Una fila por día trabajado o con concepto. En I/V, "Horas Trabajadas" muestra las horas reconocidas (7,33) solo si ese día sumó al tope; es informativo y no entra en los totales |
+| Informe Horas Extras | Formato de importación a nómina (códigos 045, 046, 011, …). Una fila por día trabajado o con concepto. En I/V, "Horas Trabajadas" muestra las horas reconocidas (7,33) solo si ese día contó para la jornada; es informativo y no entra en los totales |
 | Novedades de Nómina | Fechas de incapacidad, vacaciones, permisos, ausencias y sin contrato, con su efecto en el tope |
 | Liquidación de Pago | Valores por concepto y total por empleado (números con formato moneda) |
 | Resumen Total Horas | Totales del período, incluidas horas reconocidas por I/V |

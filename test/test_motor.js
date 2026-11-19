@@ -58,14 +58,14 @@ seccion("Incapacidad y vacaciones (7,33 h; no domingo ni festivo; requiere turno
   assert("Ejemplo 2.3: 0 extras (40,33 < 42)", extras(semana.resumen), 0);
 }
 {
-  // Vacaciones lun–mié (21,99 h) y luego tres turnos de 11 h (33 h): 54,99 h → 12,99 extras
+  // Vacaciones lun–mié (21,99 h) y luego tres turnos de 11 h (33 h): las vacaciones cuentan
+  // para la jornada pero no para extras → 33 h trabajadas < 42 → 0 extras
   const { semana } = calcular([["V", "V", "V", "V", "D", "D", "D"]]);
   assert("Vacaciones en domingo: 0 horas", semana.turnos[0].horasVacaciones, 0);
   assert("Vacaciones lun–mié: 21,99 horas reconocidas", semana.resumen.horasVacaciones, 21.99);
-  assert("Vacaciones + trabajo: 12,99 extras (54,99 − 42)", extras(semana.resumen), 12.99);
-  assert("Vacaciones + trabajo: 20,01 ordinarias (42 − 21,99)", r2(semana.resumen.horasOrdinarias), 20.01);
-  assert("Las extras empiezan el viernes, cuando se cruza el tope", r2(extras(semana.turnos[5])), 1.99);
-  assert("Todo el sábado es extra", r2(extras(semana.turnos[6])), 11);
+  assert("Vacaciones no generan extras: 0 extras con 33 h de turnos", extras(semana.resumen), 0);
+  assert("Vacaciones: las 33 h de turnos son ordinarias", r2(semana.resumen.horasOrdinarias), 33);
+  assert("Vacaciones cubren la jornada: 0 horas faltantes", semana.resumen.horasDeuda, 0);
 }
 {
   const { semana } = calcular([["C", "V", "D", "C", "C", "C", "C"]], { inicio: SEMANA_FESTIVO });
@@ -255,7 +255,7 @@ seccion("Resultados individuales y exportación a Excel");
     return undefined;
   };
   assert("Excel = pantalla: horas ordinarias", valor("1", "Horas Ordinarias"), resumenAna.horasOrdinarias);
-  assert("Excel = pantalla: vacaciones reconocidas", valor("1", "Horas reconocidas por vacaciones (suman al tope)"), resumenAna.horasVacaciones);
+  assert("Excel = pantalla: vacaciones reconocidas", valor("1", "Horas reconocidas por vacaciones (jornada, no extras)"), resumenAna.horasVacaciones);
   assert("Excel = pantalla: total trabajadas", valor("1", "TOTAL HORAS TRABAJADAS"), resumenAna.totalHoras);
 
   const liq = app.calcularLiquidacionEmpleado(ana);
@@ -323,6 +323,49 @@ seccion("Período y regla de 24 horas");
   assert("Regla: muestra la pausa de alimentación", regla.includes("regla-pausa"), true);
   const r24 = app._htmlReglaTurno({ inicio: "07:00", fin: "07:00", color: "#8B5CF6", descontarAlimentacion: true }, { tipo: "predefinido", tiempoEnHoras: 0.5 });
   assert("Regla de 24 h: dos pausas", (r24.match(/regla-pausa/g) || []).length, 2);
+}
+
+seccion("Excel: separación por semana");
+{
+  const app = crearApp();
+  agregarEmpleado(app, { documento: "100", nombre: "Alejo", inicio: "2026-11-01", semanas: [
+    ["D", "D", "D", "D", "D", "N", "24T"],
+    ["I", "I", "I", "I", "I", "D", "N"],
+  ] });
+  agregarEmpleado(app, { documento: "200", nombre: "Luis", inicio: "2026-11-01", semanas: [["C", "D", "D", "C", "C", "C", "C"], ["C", "C", "C", "C", "C", "C", "C"]] });
+  app.calcularTurnos();
+  const informe = app.construirLibroExcel().hojas.find((h) => h.nombre === "Informe Horas Extras");
+  const fila = (r) => informe.filas[r];
+  assert("Línea al empezar la semana 2 (domingo 8 nov)", informe.separadores.map((r) => fila(r)[2]), [new Date(2026, 10, 8).toLocaleDateString("es-CO")]);
+  assert("Línea más gruesa al cambiar de empleado", informe.separadoresEmpleado.map((r) => fila(r)[0]), ["200"]);
+  const nov = app.construirLibroExcel().hojas.find((h) => h.nombre === "Novedades de Nómina");
+  assert("Novedades: sin separador dentro de una misma semana", nov.separadores.length + nov.separadoresEmpleado.length, 0);
+}
+
+seccion("Motor de festivos de Colombia");
+{
+  const app = crearApp();
+  const lista = (anio) => app.calcularFestivosColombia(anio).map((f) => app._fechaKey(f.fecha));
+  // Lista oficial publicada (19 festivos por año)
+  const oficial2026 = ["2026-01-01", "2026-01-12", "2026-03-23", "2026-04-02", "2026-04-03", "2026-05-01", "2026-05-18", "2026-06-08", "2026-06-15", "2026-06-29", "2026-07-13", "2026-07-20", "2026-08-07", "2026-08-17", "2026-10-12", "2026-11-02", "2026-11-16", "2026-12-08", "2026-12-25"];
+  const oficial2027 = ["2027-01-01", "2027-01-11", "2027-03-22", "2027-03-25", "2027-03-26", "2027-05-01", "2027-05-10", "2027-05-31", "2027-06-07", "2027-07-05", "2027-07-12", "2027-07-20", "2027-08-07", "2027-08-16", "2027-10-18", "2027-11-01", "2027-11-15", "2027-12-08", "2027-12-25"];
+  const anterior2025 = ["2025-01-01", "2025-01-06", "2025-03-24", "2025-04-17", "2025-04-18", "2025-05-01", "2025-06-02", "2025-06-23", "2025-06-30", "2025-07-20", "2025-08-07", "2025-08-18", "2025-10-13", "2025-11-03", "2025-11-17", "2025-12-08", "2025-12-25"];
+  assert("2026: los 19 festivos oficiales", lista(2026), oficial2026);
+  assert("2027: los 19 festivos oficiales", lista(2027), oficial2027);
+  assert("2025: igual a la lista anterior (San Pedro y Sagrado Corazón coinciden el 30 jun)", [...new Set(lista(2025))], anterior2025);
+  assert("Nombre del festivo", app.nombreFestivo(new Date(2026, 9, 12)), "Día de la Raza");
+  assert("Años futuros también se calculan (Navidad 2031)", app.esFestivo(new Date(2031, 11, 25)), true);
+  assert("Un día normal no es festivo", app.esFestivo(new Date(2026, 9, 13)), false);
+}
+
+seccion("V10: incapacidad y vacaciones no cargan a extras");
+{
+  // Caso de la imagen: dom 8 a sáb 14 nov 2026: I, I, I y cuatro turnos de 11 h (44 h)
+  const { semana } = calcular([["I", "I", "I", "D", "D", "D", "D"]], { inicio: "2026-11-08" });
+  assert("Solo los turnos suman extras: 44 h − 42 = 2 extras", extras(semana.resumen), 2);
+  assert("Las 2 extras caen el sábado 14", [r2(extras(semana.turnos[5])), r2(extras(semana.turnos[6]))], [0, 2]);
+  assert("La incapacidad se sigue informando: 7,33 h lunes y martes", [semana.turnos[0].horasIncapacidad, semana.turnos[1].horasIncapacidad, semana.turnos[2].horasIncapacidad], [0, 7.33, 7.33]);
+  assert("Total de incapacidad reconocida en la semana: 14,66 h", semana.resumen.horasIncapacidad, 14.66);
 }
 
 terminar();

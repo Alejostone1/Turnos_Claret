@@ -161,3 +161,12 @@ Se ejecutó la aplicación completa en Chrome con un guion automatizado: **46 de
 5. **Festivos:** lista fija 2025–2027 en el código; hay que ampliarla para 2028.
 6. **Renovación visual:** se rediseñaron el selector de turnos, los modales, las acciones por empleado, el aviso de recuperación y la cabecera de resultados, sobre el diseño existente. No se rehizo cada pantalla desde cero.
 7. **Archivos antiguos no incluidos en el ZIP:** `archivos/tmp_test_runner.js` (temporal; además espera 23,5 h para el turno de 24 h, cuando la regla vigente da 23 h), `archivos/VALIDACION_CAMBIOS.js`, `archivos/ANALISIS_TOPE_SEMANAL.md`, `archivos/IMPLEMENTACION_CAMBIOS.md` (describen reglas anteriores y contradicen las actuales) y `archivos/desktop.ini`. Siguen en la carpeta del proyecto; no se borraron.
+
+---
+
+## 9. Cambio de regla en la versión 10 (19 nov 2026)
+
+- **Antes (v5–v9):** incapacidad y vacaciones sumaban 7,33 h al acumulado y adelantaban las extras de los turnos.
+- **Ahora (v10):** cuentan 7,33 h para la **jornada de 42 h** (cubren horas faltantes y se informan en el Excel), pero **no suman para extras**. Las extras salen solo de los turnos trabajados.
+- Las condiciones para mostrar las 7,33 h no cambian: no en domingo ni festivo, y solo si la semana tiene turnos.
+- Ejemplo: dom–mar incapacitado y mié–sáb turnos de 11 h (44 h) → antes 16,66 h extras; ahora **2 h** extras (44 − 42), el sábado.

@@ -1,5 +1,5 @@
 # Manual de usuario
-## Control de Turnos y Horas Extras · Versión 5.0
+## Control de Turnos y Horas Extras · Versión 10
 
 Este manual explica, paso a paso y sin términos técnicos, cómo programar los turnos de los empleados, revisar sus horas extras y recargos, y descargar el informe para nómina.
 
@@ -219,13 +219,15 @@ Pulse **Exportar Resultados** (o **Exportar resultados de [nombre]** si está vi
 | Hoja | Para qué sirve |
 |---|---|
 | Informe Horas Extras | El formato para cargar a nómina, con los códigos de cada concepto. Incluye los días de incapacidad, vacaciones y permisos. |
-| Novedades de Nómina | Todas las fechas de incapacidad, vacaciones, permisos, ausencias y sin contrato, y si sumaron al tope. |
+| Novedades de Nómina | Todas las fechas de incapacidad, vacaciones, permisos, ausencias y sin contrato, y si contaron para la jornada. |
 | Liquidación de Pago | Valores en pesos por concepto. |
 | Resumen Total Horas | Totales del período por empleado. |
 | Semana 1, Semana 2… | El detalle de cada día. |
 | Resumen de Turnos | Cuántos turnos de cada tipo hubo por semana. |
 
-> En el Informe, los días de **incapacidad o vacaciones** muestran **7,33** en "Horas Trabajadas" solo cuando esas horas sumaron al tope de la semana. Es informativo: no se suma a extras ni recargos.
+En **Informe Horas Extras** y **Novedades de Nómina**, una línea oscura separa cada semana (de domingo a sábado) y una línea más gruesa separa a cada empleado.
+
+> En el Informe, los días de **incapacidad o vacaciones** muestran **7,33** en "Horas Trabajadas" solo cuando esas horas contaron para la jornada de la semana. Es informativo: no se suma a extras ni recargos.
 
 ---
 
@@ -244,17 +246,23 @@ Ejemplo: si el viernes, a las 3:00 p. m., el empleado completa 42 horas en la se
 ## 10. Casos especiales
 
 ### Incapacidad o vacaciones con turnos en la semana
-Cada día de incapacidad o vacaciones suma **7,33 horas** al conteo de la semana, como si hubiera trabajado para efectos del tope. **No** son horas trabajadas ni se pagan como extras.
+Cada día de incapacidad o vacaciones cuenta **7,33 horas** para la **jornada de 42 horas** (así la semana no queda con horas faltantes), y esas horas se ven en el Excel.
+
+Pero **no cuentan para las extras**: las horas extras salen **solo de los turnos trabajados**. Si los turnos de la semana no pasan de 42 horas, no hay extras, aunque haya incapacidad o vacaciones.
 
 *Ejemplo:* domingo y lunes incapacitado, martes a jueves turnos de 11 horas.  
-Horas trabajadas: 33. Incapacidad que suma: 7,33 (solo el lunes; el domingo no cuenta).  
-Total: 40,33 → **no hay extras**.
+Horas trabajadas: 33. Incapacidad: 7,33 (solo el lunes; el domingo no cuenta).  
+Extras: **0**, porque los turnos (33 h) no pasan de 42.
+
+*Otro ejemplo:* domingo a martes incapacitado y miércoles a sábado turnos de 11 horas (44 h).  
+Incapacidad: 7,33 el lunes y 7,33 el martes.  
+Extras: **2 horas** (44 − 42), el sábado. La incapacidad no aumenta las extras.
 
 ### Incapacidad o vacaciones en domingo o festivo
-Ese día **no suma** horas al conteo de la semana.
+Ese día **no cuenta** horas para la jornada.
 
 ### Toda la semana incapacitado o de vacaciones
-Si en la semana **no trabajó ningún turno**, las incapacidades o vacaciones **no suman** horas para extras. Las fechas sí aparecen en el Excel.
+Si en la semana **no trabajó ningún turno**, las incapacidades o vacaciones no muestran horas. Las fechas sí aparecen en el Excel.
 
 ### Permiso remunerado
 No suma para extras. Solo evita que la semana aparezca con "horas faltantes".

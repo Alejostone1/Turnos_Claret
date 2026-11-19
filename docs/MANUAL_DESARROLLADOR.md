@@ -1,5 +1,5 @@
 # Manual del desarrollador
-## Control de Turnos y Horas Extras · Versión 5.0
+## Control de Turnos y Horas Extras · Versión 10
 
 Referencia técnica para mantener, probar y desplegar el sistema. Para el uso diario, ver el **Manual de usuario** (`archivos/instructivo.md`, visible dentro de la aplicación).
 
@@ -117,7 +117,7 @@ Punto de entrada: `calcularTurnos(documentos = null)` → por cada empleado `_ca
 
 | Comportamiento | Códigos (o nombre que contenga) | Efecto |
 |---|---|---|
-| `suma_tope` | `I`, `V` (*incapac*, *vacacion*) | Suma `horas` al acumulado si no es domingo/festivo y `semanaConTurnoReal`. Se registra en `horasIncapacidad` / `horasVacaciones`. |
+| `suma_tope` | `I`, `V` (*incapac*, *vacacion*) | Cuenta `horas` para la jornada (cubre deuda) si no es domingo/festivo y `semanaConTurnoReal`. Se registra en `horasIncapacidad` / `horasVacaciones`. **No** suma a `horasAcumuladasParaExtras` (desde v10). |
 | `cubre_deuda` | `PR` (*permiso* + *remuner*) | Solo `horasCubreDeuda` (no domingo/festivo). |
 | `resta` | `A` (*ausencia*) | Resta `horas` del acumulado. |
 | `reduce_tope` | `SC` (*sincontrato*) | Resta `horas` al tope, lunes a sábado. |

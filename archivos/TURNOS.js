@@ -1,11 +1,15 @@
 /**
  * Sistema de Control de Turnos y Cálculo de Horas Extras - Versión Mejorada
  * Maneja períodos completos con cálculo semanal y acumulado correcto
- * Versión: 5.0
+ * Versión: 10
+ *
+ * CAMBIOS v10:
+ * - Incapacidad y vacaciones cuentan para la jornada de 42 h pero NO suman para extras:
+ *   las extras salen solo de los turnos trabajados
  *
  * CAMBIOS v5.0:
- * - Incapacidad y vacaciones suman 7,33 h al tope de 42 h (no en domingo ni festivo,
- *   y solo si la semana tiene al menos un turno realmente trabajado)
+ * - Incapacidad y vacaciones cuentan 7,33 h para la jornada de 42 h (no en domingo ni
+ *   festivo, y solo si la semana tiene turnos), pero NO generan ni adelantan extras
  * - Clasificación cronológica real al cruzar el tope (antes se agrupaba diurno/nocturno)
  * - Selector de turnos con tarjetas, colores fijos de conceptos, contraseña de configuración
  * - Pre-guardado persistente, resultados individuales, eliminación real de turnos y empleados
@@ -51,69 +55,14 @@ class SistemaTurnosMejorado {
       this._actualizarPasos("seccion-configuracion");
     }
 
-    // Base de datos de festivos en Colombia (formato YYYY-MM-DD)
-    this.festivosColombia = new Set([
-      // 2025
-      "2025-01-01", // Año Nuevo
-      "2025-01-06", // Día de los Reyes Magos
-      "2025-03-24", // Día de San José
-      "2025-04-17", // Jueves Santo
-      "2025-04-18", // Viernes Santo
-      "2025-05-01", // Día del Trabajo
-      "2025-06-02", // Día de la Ascensión
-      "2025-06-23", // Corpus Christi
-      "2025-06-30", // Sagrado Corazón / San Pedro y San Pablo
-      "2025-07-20", // Día de la Independencia
-      "2025-08-07", // Batalla de Boyacá
-      "2025-08-18", // La Asunción de la Virgen
-      "2025-10-13", // Día de la Raza
-      "2025-11-03", // Día de Todos los Santos
-      "2025-11-17", // Independencia de Cartagena
-      "2025-12-08", // Día de la Inmaculada Concepción
-      "2025-12-25", // Navidad
-
-      // 2026
-      "2026-01-01", // Año Nuevo
-      "2026-01-12", // Día de los Reyes Magos
-      "2026-03-23", // Día de San José
-      "2026-04-02", // Jueves Santo
-      "2026-04-03", // Viernes Santo
-      "2026-05-01", // Día del Trabajo
-      "2026-05-18", // Día de la Ascensión del Señor
-      "2026-06-08", // Corpus Christi
-      "2026-06-15", // Sagrado Corazón de Jesús
-      "2026-06-29", // San Pedro y San Pablo
-      "2026-07-13", // Virgen de chinquinquira
-      "2026-07-20", // Día de la Independencia
-      "2026-08-07", // Batalla de Boyacá
-      "2026-08-17", // La Asunción de la Virgen
-      "2026-10-12", // Día de la Raza
-      "2026-11-02", // Día de Todos los Santos
-      "2026-11-16", // Independencia de Cartagena
-      "2026-12-08", // Día de la Inmaculada Concepción
-      "2026-12-25", // Navidad
-
-            // 2027
-      "2027-01-01", // Año Nuevo
-      "2027-01-11", // Día de los Reyes Magos
-      "2027-03-22", // Día de San José
-      "2027-03-25", // Jueves Santo
-      "2027-03-26", // Viernes Santo
-      "2027-05-01", // Día del Trabajo
-      "2027-05-10", // Día de la Ascensión del Señor
-      "2027-05-31", // Corpus Christi
-      "2027-06-07", // Sagrado Corazón de Jesús
-      "2027-07-05", // San Pedro y San Pablo
-      "2027-07-12", // Virgen del Rosario de Chiquinquirá
-      "2027-07-20", // Día de la Independencia
-      "2027-08-07", // Batalla de Boyacá
-      "2027-08-16", // La Asunción de la Virgen
-      "2027-10-18", // Día de la Raza
-      "2027-11-01", // Día de Todos los Santos
-      "2027-11-15", // Independencia de Cartagena
-      "2027-12-08", // Día de la Inmaculada Concepción
-      "2027-12-25", // Navidad
-    ]);
+    // Festivos de Colombia: se calculan por año (Ley 51 de 1983 / Ley Emiliani y fiestas
+    // movibles según la Pascua). Ver calcularFestivosColombia().
+    this._festivosPorAnio = new Map();
+    this.festivosColombia = new Set();
+    const anioActual = new Date().getFullYear();
+    for (let anio = 2025; anio <= Math.max(anioActual + 5, 2030); anio++) {
+      this._festivosDelAnio(anio).forEach((_, key) => this.festivosColombia.add(key));
+    }
 
     // El resumen del período cuenta festivos: se actualiza cuando ya existen
     if (!this._options.skipUI) this._actualizarEtiquetaPeriodo();
@@ -316,12 +265,21 @@ class SistemaTurnosMejorado {
     if (wrapper) {
       wrapper.style.background = estilos.bg;
       wrapper.style.color = estilos.text;
-      wrapper.style.border = wrapper.classList.contains('festivo')
-        ? '2px dashed #b91c1c'
-        : `1px solid ${estilos.border}`;
-      wrapper.style.boxShadow = wrapper.classList.contains('festivo')
-        ? '0 0 0 3px rgba(220, 38, 38, 0.16)'
-        : '0 4px 12px rgba(2,6,23,0.08)';
+      this._aplicarBordeDia(wrapper, estilos);
+    }
+  }
+
+  /**
+   * Borde de la tarjeta del día. Domingos y festivos llevan un borde naranja suave
+   * para distinguirlos sin importar el color del turno asignado.
+   */
+  _aplicarBordeDia(diaContainer, estilos) {
+    if (diaContainer.classList.contains('festivo')) {
+      diaContainer.style.border = '2px solid #F2A65A';
+      diaContainer.style.boxShadow = '0 0 0 3px rgba(242, 166, 90, 0.22), 0 4px 12px rgba(2,6,23,0.08)';
+    } else {
+      diaContainer.style.border = estilos ? `1px solid ${estilos.border}` : '';
+      diaContainer.style.boxShadow = '0 4px 12px rgba(2,6,23,0.08)';
     }
   }
 
@@ -1081,7 +1039,7 @@ class SistemaTurnosMejorado {
   _describirReglaConcepto(codigo) {
     switch (this._obtenerComportamientoConceptoEspecial(codigo)) {
       case "suma_tope":
-        return "Suma estas horas al acumulado de 42 h (no en domingo ni festivo, y solo si la semana tiene un turno trabajado).";
+        return "Cuenta estas horas para la jornada de 42 h (no en domingo ni festivo, y solo si la semana tiene turnos). No genera extras: las extras salen solo de los turnos.";
       case "cubre_deuda":
         return "No suma para extras; solo cubre las horas faltantes de la semana.";
       case "resta":
@@ -1160,8 +1118,8 @@ class SistemaTurnosMejorado {
 
   /**
    * Determina el comportamiento de un concepto especial respecto al tope semanal:
-   * 'suma_tope'   → I, V: suman sus horas al acumulado semanal (no en domingo ni festivo,
-   *                 y solo si la semana tiene al menos un turno realmente trabajado)
+   * 'suma_tope'   → I, V: cuentan sus horas para la jornada de 42 h (no en domingo ni festivo,
+   *                 y solo si la semana tiene turnos). No suman al acumulado de extras.
    * 'cubre_deuda' → PR: no suma al acumulado de extras; solo cubre la deuda semanal
    * 'resta'       → A: resta horas equivalentes del acumulador (dificulta alcanzar el tope)
    * 'reduce_tope' → SC: reduce el tope semanal (solo lunes–sábado, nunca domingo)
@@ -1202,10 +1160,10 @@ class SistemaTurnosMejorado {
 
   /**
    * Retorna { ajusteAcumulador, ajusteTope, horasCubreDeuda, horasReconocidas } para un concepto.
-   * - ajusteAcumulador: variación al acumulador de horas para extras (>0 I/V, <0 A)
+   * - ajusteAcumulador: variación al acumulador de horas para extras (<0 A; I/V no lo cambian)
    * - ajusteTope:       variación al tope semanal (<0 para SC, 0 para el resto)
    * - horasCubreDeuda:  horas justificadas que descuentan la deuda semanal (I/PR/V)
-   * - horasReconocidas: horas de I/V que efectivamente suman al acumulado semanal
+   * - horasReconocidas: horas de I/V que cuentan para la jornada (se informan, no generan extras)
    * @param {string}  codigo  Código del concepto
    * @param {boolean} esDomingo  true si el día es domingo (SC no reduce tope en domingo)
    * @param {object}  [contexto]  { esFestivo, semanaConTurnoReal } para I/V
@@ -1222,7 +1180,7 @@ class SistemaTurnosMejorado {
         const cuenta = !esDiaNoHabil && contexto.semanaConTurnoReal !== false;
         const reconocidas = cuenta ? horas : 0;
         return {
-          ajusteAcumulador: reconocidas,
+          ajusteAcumulador: 0,
           ajusteTope: 0,
           horasCubreDeuda: esDiaNoHabil ? 0 : horas,
           horasReconocidas: reconocidas,
@@ -1305,7 +1263,7 @@ class SistemaTurnosMejorado {
         <span class="turno-fila-codigo" style="background:${turno.color}; color:${estilos.text}; border-color:${estilos.border}">${this._escaparHTML(turno.codigo)}</span>
         <div class="turno-fila-info">
           <span class="turno-fila-nombre">${this._escaparHTML(turno.nombre)}${protegido ? ' <span class="turno-fila-etiqueta">Base</span>' : ""}${turno.activo ? "" : ' <span class="turno-fila-etiqueta etiqueta-inactivo">Inactivo</span>'}</span>
-          <span class="turno-fila-detalle">${this.formatearHoraAMPM(turno.inicio)} – ${this.formatearHoraAMPM(turno.fin)} · ${this._formatearHoras(horas)} h efectivas${turno.descontarAlimentacion !== false ? "" : " · sin descuento de alimentación"}</span>
+          <span class="turno-fila-detalle">${this._htmlHorarioTurno(turno)}<span class="turno-horas">${this._formatearHoras(horas)} h efectivas</span>${turno.descontarAlimentacion !== false ? "" : '<span class="turno-sin-alim">sin descuento de alimentación</span>'}</span>
         </div>
         <div class="turno-fila-regla">${this._htmlReglaTurno(turno, confAlm, { conMarcas: false })}</div>
         <div class="turno-fila-acciones">
@@ -1350,6 +1308,18 @@ class SistemaTurnosMejorado {
     const leida = this.obtenerConfiguracionAlmuerzo();
     this.configuracionAlmuerzo = guardada;
     return leida;
+  }
+
+  /**
+   * Horario del turno como bloque destacado: "7:00 am → 7:00 pm" (+1 si termina al día siguiente).
+   */
+  _htmlHorarioTurno(turno) {
+    const pasaMedianoche = this._toMinutes(turno.fin) <= this._toMinutes(turno.inicio);
+    return `<span class="turno-horario">
+      <span class="turno-horario-hora">${this.formatearHoraAMPM(turno.inicio)}</span>
+      <svg class="turno-horario-flecha" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      <span class="turno-horario-hora">${this.formatearHoraAMPM(turno.fin)}</span>${pasaMedianoche ? '<span class="turno-horario-dia" title="Termina al día siguiente">+1</span>' : ""}
+    </span>`;
   }
 
   _formatearHoras(valor) {
@@ -1472,7 +1442,7 @@ class SistemaTurnosMejorado {
       <div class="turno-fila-info">
         <span class="turno-fila-nombre">${this._escaparHTML(nombre)}</span>
         <span class="turno-fila-detalle">${turno.inicio && turno.fin
-          ? `${this.formatearHoraAMPM(turno.inicio)} – ${this.formatearHoraAMPM(turno.fin)} · ${this._formatearHoras(horas)} h efectivas`
+          ? `${this._htmlHorarioTurno(turno)}<span class="turno-horas">${this._formatearHoras(horas)} h efectivas</span>`
           : "Defina inicio y fin"}</span>
       </div>
       ${turno.inicio && turno.fin ? `<div class="turno-vista-regla">${this._htmlReglaTurno({ ...turno, color }, this._leerAlmuerzoFormulario())}</div>` : ""}`;
@@ -2788,14 +2758,98 @@ class SistemaTurnosMejorado {
     if (fecha.getDay() === 0) {
       return true; // Los domingos siempre son festivos.
     }
-    // Formatea la fecha a 'YYYY-MM-DD' para buscarla en la base de datos.
-    const anio = fecha.getFullYear();
-    const mes = (fecha.getMonth() + 1).toString().padStart(2, "0");
-    const dia = fecha.getDate().toString().padStart(2, "0");
-    const fechaFormateada = `${anio}-${mes}-${dia}`;
-
-    return this.festivosColombia.has(fechaFormateada);
+    return this._festivosDelAnio(fecha.getFullYear()).has(this._fechaKey(fecha));
   }
+
+  /**
+   * Nombre del festivo de una fecha (null si no es festivo nacional).
+   */
+  nombreFestivo(fecha) {
+    return this._festivosDelAnio(fecha.getFullYear()).get(this._fechaKey(fecha)) || null;
+  }
+
+  /**
+   * Festivos de un año como Map("YYYY-MM-DD" → nombre), con caché.
+   */
+  _festivosDelAnio(anio) {
+    if (!this._festivosPorAnio) this._festivosPorAnio = new Map();
+    if (!this._festivosPorAnio.has(anio)) {
+      const mapa = new Map();
+      this.calcularFestivosColombia(anio).forEach(({ fecha, nombre }) => {
+        const key = this._fechaKey(fecha);
+        mapa.set(key, mapa.has(key) ? `${mapa.get(key)} / ${nombre}` : nombre);
+      });
+      this._festivosPorAnio.set(anio, mapa);
+    }
+    return this._festivosPorAnio.get(anio);
+  }
+
+  /**
+   * Domingo de Pascua (algoritmo gregoriano anónimo de Meeus/Jones/Butcher).
+   */
+  _domingoDePascua(anio) {
+    const a = anio % 19;
+    const b = Math.floor(anio / 100);
+    const c = anio % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mes = Math.floor((h + l - 7 * m + 114) / 31);
+    const dia = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(anio, mes - 1, dia);
+  }
+
+  /**
+   * Festivos nacionales de Colombia para un año.
+   * - Fijos: se celebran el mismo día.
+   * - Ley Emiliani: se trasladan al lunes siguiente si no caen en lunes.
+   * - Movibles según la Pascua (algunos también se trasladan al lunes).
+   */
+  calcularFestivosColombia(anio) {
+    const fecha = (mes, dia) => new Date(anio, mes - 1, dia);
+    const alLunes = (d) => {
+      const r = new Date(d);
+      const dia = r.getDay();
+      if (dia !== 1) r.setDate(r.getDate() + ((8 - dia) % 7));
+      return r;
+    };
+    const desdePascua = (dias) => {
+      const r = this._domingoDePascua(anio);
+      r.setDate(r.getDate() + dias);
+      return r;
+    };
+
+    const festivos = [
+      { fecha: fecha(1, 1), nombre: "Año Nuevo" },
+      { fecha: alLunes(fecha(1, 6)), nombre: "Reyes Magos" },
+      { fecha: alLunes(fecha(3, 19)), nombre: "San José" },
+      { fecha: desdePascua(-3), nombre: "Jueves Santo" },
+      { fecha: desdePascua(-2), nombre: "Viernes Santo" },
+      { fecha: fecha(5, 1), nombre: "Día del Trabajo" },
+      { fecha: alLunes(desdePascua(39)), nombre: "Ascensión del Señor" },
+      { fecha: alLunes(desdePascua(60)), nombre: "Corpus Christi" },
+      { fecha: alLunes(desdePascua(68)), nombre: "Sagrado Corazón de Jesús" },
+      { fecha: alLunes(fecha(6, 29)), nombre: "San Pedro y San Pablo" },
+      { fecha: fecha(7, 20), nombre: "Día de la Independencia" },
+      { fecha: fecha(8, 7), nombre: "Batalla de Boyacá" },
+      { fecha: alLunes(fecha(8, 15)), nombre: "Asunción de la Virgen" },
+      { fecha: alLunes(fecha(10, 12)), nombre: "Día de la Raza" },
+      { fecha: alLunes(fecha(11, 1)), nombre: "Todos los Santos" },
+      { fecha: alLunes(fecha(11, 11)), nombre: "Independencia de Cartagena" },
+      { fecha: fecha(12, 8), nombre: "Inmaculada Concepción" },
+      { fecha: fecha(12, 25), nombre: "Navidad" },
+    ];
+    // Día de la Virgen de Chiquinquirá (9 de julio, trasladable al lunes): festivo desde 2026
+    if (anio >= 2026) festivos.push({ fecha: alLunes(fecha(7, 9)), nombre: "Virgen de Chiquinquirá" });
+    return festivos.sort((x, y) => x.fecha - y.fecha);
+  }
+
 
   /**
    * Agrega un empleado a la estructura de datos y genera su calendario.
@@ -3102,7 +3156,11 @@ class SistemaTurnosMejorado {
               (dia, index) => `
             <div class="dia-turno ${!dia.enRango ? "fuera-rango" : ""} ${
                 dia.esFestivo ? "festivo" : ""
-              }">
+              }"${dia.esFestivo
+                ? ` data-etiqueta="${index === 0 ? "Domingo" : "Festivo"}" title="${
+                    index === 0 ? "Domingo" : `Festivo: ${this._escaparHTML(this.nombreFestivo(dia.fecha) || "")}`
+                  }"`
+                : ""}>
               <label>${dia.nombreDia}<br><small>${dia.fecha.toLocaleDateString(
                 "es-ES"
               )}</small></label>
@@ -3243,13 +3301,15 @@ class SistemaTurnosMejorado {
       const [estado, claseEstado] = empleado.cambiosSinGuardar
         ? ["Cambios sin guardar", "estado-pendiente"]
         : (preGuardado ? ["Guardado", "estado-ok"] : (tieneTurnos ? ["Turnos asignados", "estado-info"] : ["Sin turnos", "estado-neutro"]));
-      const formato = (f) => new Date(`${f}T00:00:00`).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" });
+      const formato = (f) => this._fechaCorta(new Date(`${f}T00:00:00`));
 
-      itemEmpleado.classList.add("emp-fila");
+      itemEmpleado.classList.add("emp-fila", `emp-${claseEstado}`);
       itemEmpleado.innerHTML = `
         <div class="emp-col-nombre">
-          <span class="empleado-nombre">${this._escaparHTML(empleado.nombre)}</span>
-          <span class="empleado-documento">Doc. ${empleado.documento}</span>
+          <span class="emp-identidad">
+            <span class="empleado-nombre">${this._escaparHTML(empleado.nombre)}</span>
+            <span class="empleado-documento">Doc. ${empleado.documento}</span>
+          </span>
         </div>
         <span class="empleado-fechas">${formato(empleado.fechaInicio)} – ${formato(empleado.fechaFin)}</span>
         <span class="estado-turnos"><span class="estado-pill ${claseEstado}">${estado}</span></span>
@@ -3595,8 +3655,7 @@ class SistemaTurnosMejorado {
         if (selector.value && selector.value !== '') {
           diaContainer.style.background = estilos ? estilos.bg : '';
           diaContainer.style.color = estilos ? estilos.text : '';
-          diaContainer.style.border = estilos ? `1px solid ${estilos.border}` : '';
-          diaContainer.style.boxShadow = '0 4px 12px rgba(2,6,23,0.08)';
+          this._aplicarBordeDia(diaContainer, estilos);
         } else {
           // Restaurar estilos por defecto
           diaContainer.style.background = '';
@@ -3906,9 +3965,9 @@ class SistemaTurnosMejorado {
    *
    * Reglas del acumulado semanal (se reinicia cada domingo):
    * - Turnos trabajados (dinámicos y manual) suman sus horas reales.
-   * - I y V suman sus horas configuradas, excepto domingo y festivo, y solo si en esa
-   *   semana hay al menos un turno realmente trabajado. No son horas trabajadas:
-   *   nunca generan horas ordinarias ni extras por sí mismas.
+   * - I y V cuentan sus horas configuradas para la jornada (cubren horas faltantes),
+   *   excepto domingo y festivo y solo si la semana tiene turnos. No son horas
+   *   trabajadas y NO suman al acumulado de extras: las extras salen solo de los turnos.
    * - A resta sus horas del acumulado; SC reduce el tope (lunes a sábado).
    * - PR no suma para extras; solo cubre la deuda.
    * - Las horas de cada turno se clasifican cronológicamente contra el acumulado.
@@ -4038,8 +4097,8 @@ class SistemaTurnosMejorado {
             (detalleHorasEquivalentesSemana[turno] || 0) + horasCubreDeuda;
         }
         if (horasReconocidas > 0) {
-          // I/V: suman al acumulado en el orden en que ocurren
-          horasAcumuladasParaExtras += horasReconocidas;
+          // I/V: cuentan para la jornada de 42 h (cubren horas faltantes) y se informan,
+          // pero NO suman al acumulado de extras: las extras salen solo de los turnos.
           horasReconocidasTopeSemana += horasReconocidas;
           const categoria = this._obtenerCategoriaConcepto(turno);
           if (categoria === "incapacidad") resultadoDelTurno.horasIncapacidad = horasReconocidas;
@@ -4224,8 +4283,8 @@ class SistemaTurnosMejorado {
       const tieneIV = semana.turnos.some((t) => ["incapacidad", "vacaciones"].includes(this._obtenerCategoriaConcepto(t.turno)));
       const indicadorReconocidas = tieneIV
         ? (semana.semanaConTurnoReal
-            ? ` <span class="tope-equivalentes tope-reconocidas" title="Incapacidad y vacaciones suman al acumulado de 42 h (no en domingo ni festivo)">• Suman al tope: Incapacidad ${reconocidasIncap.toFixed(2)}h · Vacaciones ${reconocidasVac.toFixed(2)}h</span>`
-            : ` <span class="tope-equivalentes tope-sin-turno" title="Sin turnos trabajados en la semana, incapacidad y vacaciones no suman al acumulado">• Sin turno trabajado: I/V no suman al tope</span>`)
+            ? ` <span class="tope-equivalentes tope-reconocidas" title="Incapacidad y vacaciones cuentan para la jornada de 42 h, pero no generan extras (no cuentan en domingo ni festivo)">• Cuentan para la jornada (no para extras): Incapacidad ${reconocidasIncap.toFixed(2)}h · Vacaciones ${reconocidasVac.toFixed(2)}h</span>`
+            : ` <span class="tope-equivalentes tope-sin-turno" title="Sin turnos trabajados en la semana, incapacidad y vacaciones no se cuentan">• Sin turno trabajado: I/V no se cuentan</span>`)
         : "";
 
       const indicadorNegativo = horasEquivalentesNegativas > 0
@@ -4700,6 +4759,12 @@ class SistemaTurnosMejorado {
           estilo.font = { ...estilo.font, color: { rgb: texto === "FFFFFF" ? "FFFFFF" : "1E293B" } };
         }
         if (!hoja.sinBordes?.includes(r)) estilo.border = bordes;
+        // Línea que separa cada semana (y una más gruesa entre empleados)
+        if (hoja.separadoresEmpleado?.includes(r)) {
+          estilo.border = { ...bordes, top: { style: "thick", color: { rgb: "15213A" } } };
+        } else if (hoja.separadores?.includes(r)) {
+          estilo.border = { ...bordes, top: { style: "medium", color: { rgb: "15213A" } } };
+        }
         celda.s = estilo;
       }
     }
@@ -4729,6 +4794,8 @@ class SistemaTurnosMejorado {
       totales: [informe.data.length - 1],
       formatos: {},
       rellenos: informe.rellenos,
+      separadores: informe.separadores,
+      separadoresEmpleado: informe.separadoresEmpleado,
       congelarFilas: 2,
     });
 
@@ -4763,21 +4830,29 @@ class SistemaTurnosMejorado {
   _generarHojaNovedades(empleados) {
     const filas = [[
       "Documento", "Nombre", "Fecha", "Día", "Tipo de día", "Código", "Concepto",
-      "Horas configuradas", "Horas sumadas al tope", "Horas que cubren deuda", "Observación",
+      "Horas configuradas", "Horas para la jornada", "Horas que cubren deuda", "Observación",
     ]];
     const rellenos = [];
+    const separadores = [];
+    const separadoresEmpleado = [];
     empleados.forEach((emp) => {
+      let primeraFilaEmpleado = true;
       emp.resultados.forEach((semana) => {
+        let primeraFilaSemana = true;
         semana.turnos.forEach((t) => {
           if (!this.configuracion.tiposTurnoEspeciales?.[t.turno]) return;
+          if (filas.length > 1 && primeraFilaEmpleado) separadoresEmpleado.push(filas.length);
+          else if (filas.length > 1 && primeraFilaSemana) separadores.push(filas.length);
+          primeraFilaEmpleado = false;
+          primeraFilaSemana = false;
           const config = this.configuracion.tiposTurnoEspeciales[t.turno];
           const comportamiento = this._obtenerComportamientoConceptoEspecial(t.turno);
           const sumadas = (t.horasIncapacidad || 0) + (t.horasVacaciones || 0);
           let observacion = "";
           if (comportamiento === "suma_tope") {
-            if (t.esDomingo || t.esFestivo) observacion = "Domingo/festivo: no suma al tope";
-            else if (!semana.semanaConTurnoReal) observacion = "Semana sin turno trabajado: no suma al tope";
-            else observacion = "Suma al acumulado de 42 h";
+            if (t.esDomingo || t.esFestivo) observacion = "Domingo/festivo: no cuenta";
+            else if (!semana.semanaConTurnoReal) observacion = "Semana sin turno trabajado: no cuenta";
+            else observacion = "Cuenta para la jornada de 42 h; no genera extras";
           } else if (comportamiento === "cubre_deuda") observacion = "Solo cubre horas faltantes";
           else if (comportamiento === "resta") observacion = "Resta del acumulado semanal";
           else if (comportamiento === "reduce_tope") observacion = t.esDomingo ? "Domingo: no reduce el tope" : "Reduce el tope semanal";
@@ -4809,6 +4884,8 @@ class SistemaTurnosMejorado {
       totales: [],
       formatos: {},
       rellenos,
+      separadores,
+      separadoresEmpleado,
       congelarFilas: 1,
     };
   }
@@ -4858,8 +4935,8 @@ class SistemaTurnosMejorado {
         ["", "", `Extra Nocturna (${conf.extraNocturna.porcentaje}%)`, r.extrasNocturnas],
         ["", "", `Extra Festiva (${conf.extraDiurnaFestiva.porcentaje}%)`, r.extrasFestivas],
         ["", "", `Extra Noc. Festiva (${conf.extraNocturnaFestiva.porcentaje}%)`, r.extrasNocturnasFestivas],
-        ["", "", "Horas reconocidas por incapacidad (suman al tope)", r.horasIncapacidad],
-        ["", "", "Horas reconocidas por vacaciones (suman al tope)", r.horasVacaciones],
+        ["", "", "Horas reconocidas por incapacidad (jornada, no extras)", r.horasIncapacidad],
+        ["", "", "Horas reconocidas por vacaciones (jornada, no extras)", r.horasVacaciones],
       );
       totales.push(filas.length, filas.length + 1);
       filas.push(
@@ -4900,7 +4977,7 @@ class SistemaTurnosMejorado {
       const filas = [[
         "Empleado", "Documento", "Día", "Fecha", "Tipo de día", "En período", "Turno",
         "H. Ord.", "H. Noc.", "H. Fest.", "H. N.F.", "E. Ord.", "E. Noc.", "E. Fest.", "E. N.F.",
-        "Horas x Turno", "Inc./Vac. al tope",
+        "Horas x Turno", "Inc./Vac. (jornada)",
       ]];
       const totales = [];
       const rellenos = [];
@@ -5031,6 +5108,9 @@ class SistemaTurnosMejorado {
 
     const data = [];
     const rellenos = [];
+    // Filas (índice en la hoja) donde empieza una semana o un empleado: llevan línea superior marcada
+    const separadores = [];
+    const separadoresEmpleado = [];
     const totales = {
       extrasOrdinarias: 0, extrasNocturnas: 0, horasFestivas: 0, horasNocturnasFestivas: 0,
       extrasFestivas: 0, extrasNocturnasFestivas: 0, horasNocturnas: 0,
@@ -5043,7 +5123,9 @@ class SistemaTurnosMejorado {
 
     this._empleadosEnResultados().forEach(empleado => {
         if (!empleado.resultados) return;
+        let primeraFilaEmpleado = true;
         empleado.resultados.forEach(semana => {
+            let primeraFilaSemana = true;
             semana.turnos.forEach(turno => {
                 const totalHorasTurno =
                 (turno.horasOrdinarias || 0) + (turno.horasNocturnas || 0) + (turno.horasFestivas || 0) +
@@ -5065,12 +5147,18 @@ class SistemaTurnosMejorado {
 
                 const tipoTurnoNombre = this.tiposTurno[turno.turno]?.nombre || turno.turno;
                 // Incapacidad/vacaciones: se informan sus horas reconocidas (p. ej. 7,33) solo si
-                // ese día sumó al tope (semana con turno trabajado, no domingo ni festivo).
+                // ese día contó para la jornada (semana con turnos, no domingo ni festivo).
                 // Es informativo: no se suma en ninguna columna de recargos ni extras.
                 const horasReconocidas = (turno.horasIncapacidad || 0) + (turno.horasVacaciones || 0);
                 const horasInforme = totalHorasTurno > 0 ? totalHorasTurno : horasReconocidas;
 
-                rellenos.push({ r: data.length + 2, c: 3, color: this._colorTurno(turno.turno) });
+                const filaHoja = data.length + 2;
+                if (data.length > 0 && primeraFilaEmpleado) separadoresEmpleado.push(filaHoja);
+                else if (data.length > 0 && primeraFilaSemana) separadores.push(filaHoja);
+                primeraFilaEmpleado = false;
+                primeraFilaSemana = false;
+
+                rellenos.push({ r: filaHoja, c: 3, color: this._colorTurno(turno.turno) });
                 data.push([
                     empleado.documento,
                     empleado.nombre,
@@ -5109,7 +5197,7 @@ class SistemaTurnosMejorado {
 
     const cols = [ {wch: 15}, {wch: 30}, {wch: 12}, {wch: 20}, {wch: 18}, {wch: 18}, {wch: 15}, {wch: 12}, {wch: 12}, {wch: 14}, {wch: 14}, {wch: 14}, {wch: 14}, {wch: 12}, {wch: 12} ];
 
-    return { data: [header1, header2, ...data, footer], cols, rellenos };
+    return { data: [header1, header2, ...data, footer], cols, rellenos, separadores, separadoresEmpleado };
   }
 }
 

@@ -14,9 +14,9 @@ assert("C  = ninguno",     app._obtenerComportamientoConceptoEspecial("C"),  "ni
 
 seccion("Ajustes al acumulado y al tope");
 const habil = { esFestivo: false, semanaConTurnoReal: true };
-assert("I lunes con turno real: suma 7,33",
+assert("I lunes con turno real: cuenta 7,33 para la jornada, no para extras",
   app._obtenerAjusteConceptoEspecial("I", false, habil),
-  { ajusteAcumulador: 7.33, ajusteTope: 0, horasCubreDeuda: 7.33, horasReconocidas: 7.33 });
+  { ajusteAcumulador: 0, ajusteTope: 0, horasCubreDeuda: 7.33, horasReconocidas: 7.33 });
 assert("V domingo: no suma",
   app._obtenerAjusteConceptoEspecial("V", true, habil),
   { ajusteAcumulador: 0, ajusteTope: 0, horasCubreDeuda: 0, horasReconocidas: 0 });

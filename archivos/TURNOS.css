@@ -6368,3 +6368,145 @@ body {
     margin: 0 6px;
   }
 }
+
+/* ─── v6.1 — Horario destacado y empleados como tarjetas ─────────────── */
+.turno-fila-detalle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 4px;
+}
+.turno-horario {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9px;
+  background: var(--t-hundido);
+  box-shadow: var(--t-hundido-sombra);
+  font-family: var(--fuente-mono);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--t-tinta);
+  white-space: nowrap;
+}
+.turno-horario-flecha {
+  color: #8592A6;
+  flex: 0 0 auto;
+}
+.turno-horario-dia {
+  margin-left: 2px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--t-tinta);
+  color: #FFFFFF;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+.turno-horas {
+  font-family: var(--fuente-mono);
+  font-size: 0.8rem;
+  color: var(--t-tinta-suave);
+}
+.turno-sin-alim {
+  font-size: 0.76rem;
+  color: #92400E;
+  background: #FEF3C7;
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+
+/* Empleados: cada uno en su propia tarjeta */
+.lista-empleados {
+  gap: 10px;
+}
+.emp-fila.emp-fila-encabezado {
+  padding: 0 18px 2px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.item-empleado.emp-fila {
+  position: relative;
+  padding: 14px 18px;
+  background: #F6F8FB;
+  border: 1px solid #E3E9F0;
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(21, 33, 58, 0.04);
+  overflow: hidden;
+}
+.item-empleado.emp-fila::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #CBD3DE;
+}
+.item-empleado.emp-fila.emp-estado-ok::before { background: #16A34A; }
+.item-empleado.emp-fila.emp-estado-pendiente::before { background: #D97706; }
+.item-empleado.emp-fila.emp-estado-info::before { background: var(--t-acento); }
+.item-empleado.emp-fila:hover {
+  background: #FFFFFF;
+  border-color: #D6DDE6;
+  box-shadow: 0 10px 22px -14px rgba(21, 33, 58, 0.35);
+}
+.emp-col-nombre {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.emp-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--t-tinta);
+  color: #FFFFFF;
+  font-family: var(--fuente-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25), 0 4px 10px -4px rgba(21, 33, 58, 0.45);
+}
+.emp-identidad {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.emp-identidad .empleado-nombre {
+  font-family: var(--fuente-display);
+  font-weight: 600;
+  font-size: 1.02rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.emp-identidad .empleado-documento {
+  font-family: var(--fuente-mono);
+  font-size: 0.78rem;
+}
+.item-empleado.emp-fila .empleado-fechas {
+  font-family: var(--fuente-mono);
+  font-size: 0.84rem;
+  color: var(--t-tinta);
+}
+.item-empleado.emp-fila .empleado-fechas {
+  white-space: nowrap;
+}
+
+/* Domingos y festivos: etiqueta naranja suave (el borde se aplica desde JS) */
+.dia-turno.festivo::before {
+  content: attr(data-etiqueta);
+  background: #FFF4EA;
+  color: #B5571B;
+  border: 1px solid #F2A65A;
+}
+.emp-avatar {
+  display: none;
+}
